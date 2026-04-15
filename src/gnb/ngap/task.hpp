@@ -34,6 +34,7 @@ extern "C"
     struct ASN_NGAP_OverloadStop;
     struct ASN_NGAP_PDUSessionResourceReleaseCommand;
     struct ASN_NGAP_Paging;
+    struct ASN_NGAP_PDUSessionResourceModifyRequest; //kassem
 }
 
 namespace nr::gnb
@@ -52,6 +53,9 @@ class NgapTask : public NtsTask
 
     std::unordered_map<int, NgapAmfContext *> m_amfCtx;
     std::unordered_map<int, NgapUeContext *> m_ueCtx;
+    
+    std::unordered_map<int, std::unordered_map<int, PduSessionResource *>> m_pduSessions; //kassem
+
     int64_t m_ueNgapIdCounter;
     uint32_t m_downlinkTeidCounter;
     bool m_isInitialized;
@@ -110,7 +114,8 @@ class NgapTask : public NtsTask
     void receiveSessionResourceSetupRequest(int amfId, ASN_NGAP_PDUSessionResourceSetupRequest *msg);
     void receiveSessionResourceReleaseCommand(int amfId, ASN_NGAP_PDUSessionResourceReleaseCommand *msg);
     std::optional<NgapCause> setupPduSessionResource(NgapUeContext *ue, PduSessionResource *resource);
-
+    void receiveSessionResourceModifyRequest(int amfId, ASN_NGAP_PDUSessionResourceModifyRequest *msg); //kassem
+    void sendQosFlowNotify(int ueId, int psi, int qfi, bool fulfilled); //kassem
     /* UE context management */
     void receiveInitialContextSetup(int amfId, ASN_NGAP_InitialContextSetupRequest *msg);
     void receiveContextRelease(int amfId, ASN_NGAP_UEContextReleaseCommand *msg);

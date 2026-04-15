@@ -25,6 +25,7 @@
 #include <asn/ngap/ASN_NGAP_UnsuccessfulOutcome.h>
 #include <asn/ngap/ASN_NGAP_UserLocationInformation.h>
 #include <asn/ngap/ASN_NGAP_UserLocationInformationNR.h>
+#include <asn/ngap/ASN_NGAP_PDUSessionResourceModifyRequest.h> //kassem
 
 static e_ASN_NGAP_Criticality FindCriticalityOfUserIe(ASN_NGAP_NGAP_PDU *pdu, ASN_NGAP_ProtocolIE_ID_t ieId)
 {
@@ -291,6 +292,9 @@ void NgapTask::handleSctpMessage(int amfId, uint16_t stream, const UniqueBuffer 
             break;
         case ASN_NGAP_InitiatingMessage__value_PR_Paging:
             receivePaging(amf->ctxId, &value.choice.Paging);
+            break;
+        case ASN_NGAP_InitiatingMessage__value_PR_PDUSessionResourceModifyRequest: //kassem
+            receiveSessionResourceModifyRequest(amf->ctxId, &value.choice.PDUSessionResourceModifyRequest); //kassem
             break;
         default:
             m_logger->err("Unhandled NGAP initiating-message received (%d)", value.present);

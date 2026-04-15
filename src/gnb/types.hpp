@@ -250,6 +250,21 @@ struct GtpTunnel
     OctetString address{};
 };
 
+struct AltQosProfile //kassem
+{ //kassem
+    int index{};        //kassem 1-based NGAP alternativeQoSParaSetIndex
+    uint64_t gfbrDl{};  //kassem guaranteed flow bit rate downlink (bps)
+    uint64_t gfbrUl{};  //kassem guaranteed flow bit rate uplink (bps)
+}; //kassem
+ 
+struct QosFlowQncState //kassem
+{ //kassem
+    int qfi{};                                    //kassem
+    bool qncEnabled{};                            //kassem
+    int activeProfileIndex{};                     //kassem 0=primary, 1..N=alt
+    std::vector<AltQosProfile> altProfiles{};     //kassem
+}; //kassem
+
 struct PduSessionResource
 {
     const int ueId;
@@ -261,7 +276,7 @@ struct PduSessionResource
     GtpTunnel upTunnel{};
     GtpTunnel downTunnel{};
     asn::Unique<ASN_NGAP_QosFlowSetupRequestList> qosFlows{};
-
+    std::vector<QosFlowQncState> qncFlows{}; //kassem QNC state per QFI
     PduSessionResource(const int ueId, const int psi) : ueId(ueId), psi(psi)
     {
     }
