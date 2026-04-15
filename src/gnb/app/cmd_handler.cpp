@@ -154,6 +154,47 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
         }
         break;
     }
+    case app::GnbCliCommand::QNC_NOTIFY: { //kassem
+        int ueId      = msg.cmd->ueId; //kassem
+        int psi       = msg.cmd->psi; //kassem
+        int qfi       = msg.cmd->qfi; //kassem
+        bool fulfilled = msg.cmd->fulfilled; //kassem
+
+        if (m_base->ngapTask->m_ueCtx.count(ueId) == 0) { //kassem
+            sendError(msg.address, "UE not found with given ID"); //kassem
+            break; //kassem
+        } //kassem
+
+        auto &pduSessions = m_base->ngapTask->m_pduSessions; //kassem
+        if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi)) { //kassem
+            sendError(msg.address, "PDU session not found for given UE/PSI"); //kassem
+            break; //kassem
+        } //kassem
+
+        auto *resource = pduSessions.at(ueId).at(psi); //kassem
+        bool qncFound = false; //kassem
+        for (auto &flow : resource->qncFlows) { //kassem
+            if (flow.qfi == qfi && flow.qncEnabled) { //kassem
+                qncFound = true; //kassem
+                if (!fulfilled && !flow.altProfiles.empty()) { //kassem
+                    flow.activeProfileIndex = //kassem
+                        (flow.activeProfileIndex + 1) % //kassem
+                        (static_cast<int>(flow.altProfiles.size()) + 1); //kassem
+                } //kassem
+                break; //kassem
+            } //kassem
+        } //kassem
+
+        if (!qncFound) { //kassem
+            sendError(msg.address, "QFI not found or QNC not enabled for this flow"); //kassem
+            break; //kassem
+        } //kassem
+
+        m_base->ngapTask->sendQosFlowNotify(ueId, psi, qfi, fulfilled); //kassem
+        sendResult(msg.address, std::string("Sent QoS flow notify: ") + //kassem
+            (fulfilled ? "fulfilled" : "not-fulfilled")); //kassem
+        break; //kassem
+    } //kassem
     }
 }
 

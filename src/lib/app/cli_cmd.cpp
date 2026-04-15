@@ -152,6 +152,7 @@ static OrderedMap<std::string, CmdEntry> g_gnbCmdEntries = {
     {"ue-list", {"List all UEs associated with the gNB", "", DefaultDesc, false}},
     {"ue-count", {"Print the total number of UEs connected the this gNB", "", DefaultDesc, false}},
     {"ue-release", {"Request a UE context release for the given UE", "<ue-id>", DefaultDesc, false}},
+    {"qnc-notify", {"Send QoS flow notification for a GBR flow", "<ue-id> <psi> <qfi> <fulfilled|not-fulfilled>", DefaultDesc, true}}, //kassem
 };
 
 static OrderedMap<std::string, CmdEntry> g_ueCmdEntries = {
@@ -216,6 +217,23 @@ static std::unique_ptr<GnbCliCommand> GnbCliParseImpl(const std::string &subCmd,
             CMD_ERR("Invalid UE ID")
         return cmd;
     }
+    else if (subCmd == "qnc-notify") //kassem
+    { //kassem
+        auto cmd = std::make_unique<GnbCliCommand>(GnbCliCommand::QNC_NOTIFY); //kassem
+        if (options.positionalCount() != 4) //kassem
+            CMD_ERR("Usage: qnc-notify <ue-id> <psi> <qfi> <fulfilled|not-fulfilled>") //kassem
+        cmd->ueId = utils::ParseInt(options.getPositional(0)); //kassem
+        if (cmd->ueId <= 0) CMD_ERR("Invalid UE ID") //kassem
+        cmd->psi = utils::ParseInt(options.getPositional(1)); //kassem
+        if (cmd->psi <= 0 || cmd->psi > 15) CMD_ERR("Invalid PSI") //kassem
+        cmd->qfi = utils::ParseInt(options.getPositional(2)); //kassem
+        if (cmd->qfi <= 0 || cmd->qfi > 63) CMD_ERR("Invalid QFI") //kassem
+        std::string cause = options.getPositional(3); //kassem
+        if (cause == "fulfilled") cmd->fulfilled = true; //kassem
+        else if (cause == "not-fulfilled") cmd->fulfilled = false; //kassem
+        else CMD_ERR("Cause must be 'fulfilled' or 'not-fulfilled'") //kassem
+        return cmd; //kassem
+    } //kassem
 
     return nullptr;
 }

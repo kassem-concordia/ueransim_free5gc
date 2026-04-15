@@ -29,6 +29,7 @@ struct GnbCliCommand
         UE_LIST,
         UE_COUNT,
         UE_RELEASE_REQ,
+        QNC_NOTIFY, //kassem
     } present;
 
     // AMF_INFO
@@ -36,7 +37,9 @@ struct GnbCliCommand
 
     // UE_RELEASE_REQ
     int ueId{};
-
+    int psi{};        //kassem
+    int qfi{};        //kassem
+    bool fulfilled{}; //kassem
     explicit GnbCliCommand(PR present) : present(present)
     {
     }
