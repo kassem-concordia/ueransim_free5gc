@@ -385,7 +385,8 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
         // Get the QosFlowAddOrModifyRequestList from the transfer IEs //kassem
         auto *ieFlowList = asn::ngap::GetProtocolIe( //kassem
             transfer, ASN_NGAP_ProtocolIE_ID_id_QosFlowAddOrModifyRequestList); //kassem
- 
+        m_logger->err("[QNC] ieFlowList=%p resource=%p psi=%d ueId=%d",
+        (void*)ieFlowList, (void*)resource, psi, ue->ctxId);
         if (ieFlowList && resource) //kassem
         { //kassem
             auto &flowList = ieFlowList->QosFlowAddOrModifyRequestList.list; //kassem
