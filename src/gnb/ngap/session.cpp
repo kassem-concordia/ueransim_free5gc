@@ -592,6 +592,7 @@ void NgapTask::sendQosFlowNotify(int ueId, int psi, int qfi, bool fulfilled) //k
  
     auto *notifyTransfer = //kassem
         asn::New<ASN_NGAP_PDUSessionResourceNotifyTransfer>(); //kassem
+    notifyTransfer->qosFlowNotifyList = asn::New<ASN_NGAP_QosFlowNotifyList>();
     asn::SequenceAdd(notifyTransfer->qosFlowNotifyList, notifyItem); //kassem
  
     OctetString encodedTransfer = ngap_encode::EncodeS( //kassem
