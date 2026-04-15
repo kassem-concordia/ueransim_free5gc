@@ -54,6 +54,7 @@
 #include <asn/ngap/ASN_NGAP_AlternativeQoSParaSetList.h>               //kassem
 #include <asn/ngap/ASN_NGAP_AlternativeQoSParaSetItem.h>               //kassem
 #include <asn/ngap/ASN_NGAP_ProtocolExtensionContainer.h>              //kassem
+#include <asn/ngap/ASN_NGAP_ProtocolExtensionField.h>  //kassem
 namespace nr::gnb
 {
 
@@ -337,10 +338,10 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
     auto *ue = findUeByNgapIdPair(amfId, ngap_utils::FindNgapIdPair(msg)); //kassem
     if (ue == nullptr) //kassem
         return; //kassem
-
+ 
     // The response will collect one item per successfully modified session //kassem
     std::vector<ASN_NGAP_PDUSessionResourceModifyItemModRes *> responseItems; //kassem
-
+ 
     // Get the list of PDU sessions to modify //kassem
     auto *ieList = asn::ngap::GetProtocolIe( //kassem
         msg, ASN_NGAP_ProtocolIE_ID_id_PDUSessionResourceModifyListModReq); //kassem
@@ -349,15 +350,15 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
         m_logger->err("[QNC] ModifyRequest: no session list IE found"); //kassem
         return; //kassem
     } //kassem
-
+ 
     auto &sessionList = ieList->PDUSessionResourceModifyListModReq.list; //kassem
     for (int i = 0; i < sessionList.count; i++) //kassem
     { //kassem
         auto *sessionItem = sessionList.array[i]; //kassem
         if (!sessionItem) continue; //kassem
-
+ 
         int psi = static_cast<int>(sessionItem->pDUSessionID); //kassem
-
+ 
         // The transfer is encoded bytes inside the item - decode them //kassem
         auto *transfer = //kassem
             ngap_encode::Decode<ASN_NGAP_PDUSessionResourceModifyRequestTransfer>( //kassem
@@ -368,9 +369,9 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
             m_logger->err("[QNC] ModifyRequest: failed to decode transfer for PSI=%d", psi); //kassem
             continue; //kassem
         } //kassem
-
+ 
         // ── Parse QNC and alt profiles ────────────────────────────────── //kassem
-
+ 
         // Get or create the PduSessionResource for this session //kassem
         PduSessionResource *resource = nullptr; //kassem
         if (m_pduSessions.count(ue->ctxId) && //kassem
@@ -378,11 +379,11 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
         { //kassem
             resource = m_pduSessions[ue->ctxId][psi]; //kassem
         } //kassem
-
+ 
         // Get the QosFlowAddOrModifyRequestList from the transfer IEs //kassem
         auto *ieFlowList = asn::ngap::GetProtocolIe( //kassem
             transfer, ASN_NGAP_ProtocolIE_ID_id_QosFlowAddOrModifyRequestList); //kassem
-
+ 
         if (ieFlowList && resource) //kassem
         { //kassem
             auto &flowList = ieFlowList->QosFlowAddOrModifyRequestList.list; //kassem
@@ -390,91 +391,75 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
             { //kassem
                 auto *flowItem = flowList.array[iFlow]; //kassem
                 if (!flowItem) continue; //kassem
-
+ 
                 // qosFlowLevelQosParameters is OPTIONAL in modify requests //kassem
                 // (it is absent if only the flow mapping changes) //kassem
                 auto *qosParams = flowItem->qosFlowLevelQosParameters; //kassem
                 if (!qosParams) continue; //kassem
-
+ 
                 // Only GBR flows have gBR_QosInformation //kassem
                 auto *gbrInfo = qosParams->gBR_QosInformation; //kassem
                 if (!gbrInfo) continue; //kassem
-
+ 
                 // Only process if NotificationControl is set //kassem
                 if (!gbrInfo->notificationControl) continue; //kassem
                 if (*gbrInfo->notificationControl != //kassem
                     ASN_NGAP_NotificationControl_notification_requested) continue; //kassem
-
+ 
                 int qfi = static_cast<int>(flowItem->qosFlowIdentifier); //kassem
-
+ 
                 // Build the QNC state for this flow //kassem
                 QosFlowQncState qncState{}; //kassem
                 qncState.qfi = qfi; //kassem
                 qncState.qncEnabled = true; //kassem
                 qncState.activeProfileIndex = 0; // start on primary profile //kassem
-
+ 
                 // ── Parse AlternativeQoSParaSetList ────────────────────── //kassem
-                // ASN_NGAP_GBR_QosInformation_ExtIEs is only forward- //kassem
-                // declared in UERANSIM — no full struct definition exists. //kassem
-                // Re-encode the iE_Extensions bytes and decode them using //kassem
-                // the typed descriptor so asn1c handles field access. //kassem
+                // Full struct definition is in ASN_NGAP_ProtocolExtensionField.h //kassem
+                // which we now include — direct field access is safe. //kassem
                 if (gbrInfo->iE_Extensions) //kassem
                 { //kassem
-                    uint8_t *extBytes = nullptr; //kassem
-                    ssize_t extLen = 0; //kassem
-                    if (ngap_encode::Encode( //kassem
-                            asn_DEF_ASN_NGAP_ProtocolExtensionContainer_174P96, //kassem
-                            gbrInfo->iE_Extensions, extLen, extBytes)) //kassem
+                    auto *extC = reinterpret_cast< //kassem
+                        ASN_NGAP_ProtocolExtensionContainer_174P96_t *>( //kassem
+                            gbrInfo->iE_Extensions); //kassem
+                    for (int iD = 0; iD < extC->list.count; iD++) //kassem
                     { //kassem
-                        auto *decoded = //kassem
-                            ngap_encode::Decode<ASN_NGAP_ProtocolExtensionContainer_174P96_t>( //kassem
-                                asn_DEF_ASN_NGAP_ProtocolExtensionContainer_174P96, //kassem
-                                extBytes, static_cast<size_t>(extLen)); //kassem
-                        free(extBytes); //kassem
-                        if (decoded) //kassem
+                        auto *extIE = extC->list.array[iD]; //kassem
+                        if (!extIE || extIE->id != 220) continue; //kassem
+                        auto *altList = //kassem
+                            &extIE->extensionValue //kassem
+                                 .choice.AlternativeQoSParaSetList; //kassem
+                        for (int iAlt = 0; iAlt < altList->list.count; iAlt++) //kassem
                         { //kassem
-                            for (int iD = 0; iD < decoded->list.count; iD++) //kassem
-                            { //kassem
-                                auto *dItem = decoded->list.array[iD]; //kassem
-                                if (!dItem || dItem->id != 220) continue; //kassem
-                                auto *altList = //kassem
-                                    &dItem->extensionValue.choice.AlternativeQoSParaSetList; //kassem
-                                for (int iAlt = 0; iAlt < altList->list.count; iAlt++) //kassem
-                                { //kassem
-                                    auto *altItem = altList->list.array[iAlt]; //kassem
-                                    if (!altItem) continue; //kassem
-                                    AltQosProfile prof{}; //kassem
-                                    prof.index = static_cast<int>( //kassem
-                                        altItem->alternativeQoSParaSetIndex); //kassem
-                                    if (altItem->guaranteedFlowBitRateDL) //kassem
-                                        asn::GetUnsigned64( //kassem
-                                            *altItem->guaranteedFlowBitRateDL, //kassem
-                                            prof.gfbrDl); //kassem
-                                    if (altItem->guaranteedFlowBitRateUL) //kassem
-                                        asn::GetUnsigned64( //kassem
-                                            *altItem->guaranteedFlowBitRateUL, //kassem
-                                            prof.gfbrUl); //kassem
-                                    qncState.altProfiles.push_back(prof); //kassem
-                                    m_logger->info( //kassem
-                                        "[QNC] PSI=%d QFI=%d alt[%d] index=%d " //kassem
-                                        "gfbrDL=%lu gfbrUL=%lu", //kassem
-                                        psi, qfi, iAlt, prof.index, //kassem
-                                        (unsigned long)prof.gfbrDl, //kassem
-                                        (unsigned long)prof.gfbrUl); //kassem
-                                } //kassem
-                                break; //kassem
-                            } //kassem
-                            asn::Free( //kassem
-                                asn_DEF_ASN_NGAP_ProtocolExtensionContainer_174P96, //kassem
-                                decoded); //kassem
+                            auto *altItem = altList->list.array[iAlt]; //kassem
+                            if (!altItem) continue; //kassem
+                            AltQosProfile prof{}; //kassem
+                            prof.index = static_cast<int>( //kassem
+                                altItem->alternativeQoSParaSetIndex); //kassem
+                            if (altItem->guaranteedFlowBitRateDL) //kassem
+                                asn::GetUnsigned64( //kassem
+                                    *altItem->guaranteedFlowBitRateDL, //kassem
+                                    prof.gfbrDl); //kassem
+                            if (altItem->guaranteedFlowBitRateUL) //kassem
+                                asn::GetUnsigned64( //kassem
+                                    *altItem->guaranteedFlowBitRateUL, //kassem
+                                    prof.gfbrUl); //kassem
+                            qncState.altProfiles.push_back(prof); //kassem
+                            m_logger->info( //kassem
+                                "[QNC] PSI=%d QFI=%d alt[%d] " //kassem
+                                "index=%d gfbrDL=%lu gfbrUL=%lu", //kassem
+                                psi, qfi, iAlt, prof.index, //kassem
+                                (unsigned long)prof.gfbrDl, //kassem
+                                (unsigned long)prof.gfbrUl); //kassem
                         } //kassem
+                        break; //kassem
                     } //kassem
                 } //kassem
                 m_logger->info( //kassem
                     "[QNC] PSI=%d QFI=%d qnc=true altProfiles=%d stored", //kassem
                     psi, qfi, //kassem
                     static_cast<int>(qncState.altProfiles.size())); //kassem
-
+ 
                 // Remove any existing QNC state for this QFI then add new //kassem
                 resource->qncFlows.erase( //kassem
                     std::remove_if(resource->qncFlows.begin(), //kassem
@@ -486,14 +471,14 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
                 resource->qncFlows.push_back(std::move(qncState)); //kassem
             } //kassem
         } //kassem
-
+ 
         // ── Build response for this PDU session ───────────────────────── //kassem
-
+ 
         // The response transfer: confirm which flows were added/modified. //kassem
         // We echo back every flow that was in the request. //kassem
         auto *respTransfer = //kassem
             asn::New<ASN_NGAP_PDUSessionResourceModifyResponseTransfer>(); //kassem
-
+ 
         if (ieFlowList) //kassem
         { //kassem
             auto &flowList = ieFlowList->QosFlowAddOrModifyRequestList.list; //kassem
@@ -501,7 +486,7 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
             { //kassem
                 auto *flowItem = flowList.array[iFlow]; //kassem
                 if (!flowItem) continue; //kassem
-
+ 
                 auto *respFlowItem = //kassem
                     asn::New<ASN_NGAP_QosFlowAddOrModifyResponseItem>(); //kassem
                 respFlowItem->qosFlowIdentifier = //kassem
@@ -511,14 +496,14 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
                     respFlowItem); //kassem
             } //kassem
         } //kassem
-
+ 
         OctetString encodedResp = ngap_encode::EncodeS( //kassem
             asn_DEF_ASN_NGAP_PDUSessionResourceModifyResponseTransfer, //kassem
             respTransfer); //kassem
         asn::Free( //kassem
             asn_DEF_ASN_NGAP_PDUSessionResourceModifyResponseTransfer, //kassem
             respTransfer); //kassem
-
+ 
         if (encodedResp.length() == 0) //kassem
         { //kassem
             m_logger->err("[QNC] ModifyResponse transfer encoding failed"); //kassem
@@ -527,7 +512,7 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
                 transfer); //kassem
             continue; //kassem
         } //kassem
-
+ 
         auto *resItem = //kassem
             asn::New<ASN_NGAP_PDUSessionResourceModifyItemModRes>(); //kassem
         resItem->pDUSessionID = //kassem
@@ -536,12 +521,12 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
             resItem->pDUSessionResourceModifyResponseTransfer, //kassem
             encodedResp); //kassem
         responseItems.push_back(resItem); //kassem
-
+ 
         asn::Free( //kassem
             asn_DEF_ASN_NGAP_PDUSessionResourceModifyRequestTransfer, //kassem
             transfer); //kassem
     } //kassem
-
+ 
     // ── Send the PDUSessionResourceModifyResponse ──────────────────────── //kassem
     if (!responseItems.empty()) //kassem
     { //kassem
@@ -552,17 +537,17 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
         ie->criticality = ASN_NGAP_Criticality_ignore; //kassem
         ie->value.present = //kassem
             ASN_NGAP_PDUSessionResourceModifyResponseIEs__value_PR_PDUSessionResourceModifyListModRes; //kassem
-
+ 
         for (auto *item : responseItems) //kassem
             asn::SequenceAdd( //kassem
                 ie->value.choice.PDUSessionResourceModifyListModRes, //kassem
                 item); //kassem
-
+ 
         auto *respPdu = //kassem
             asn::ngap::NewMessagePdu<ASN_NGAP_PDUSessionResourceModifyResponse>( //kassem
                 {ie}); //kassem
         sendNgapUeAssociated(ue->ctxId, respPdu); //kassem
-
+ 
         m_logger->info( //kassem
             "[QNC] PDU session resource(s) modified for UE[%d] count[%d]", //kassem
             ue->ctxId, static_cast<int>(responseItems.size())); //kassem
