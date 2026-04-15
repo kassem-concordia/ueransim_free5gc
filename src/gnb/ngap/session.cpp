@@ -55,6 +55,13 @@
 #include <asn/ngap/ASN_NGAP_AlternativeQoSParaSetItem.h>               //kassem
 #include <asn/ngap/ASN_NGAP_ProtocolExtensionContainer.h>              //kassem
 #include <asn/ngap/ASN_NGAP_ProtocolExtensionField.h>  //kassem
+#include <asn/ngap/ASN_NGAP_PDUSessionResourceNotify.h>                //kassem
+#include <asn/ngap/ASN_NGAP_PDUSessionResourceNotifyItem.h>            //kassem
+#include <asn/ngap/ASN_NGAP_PDUSessionResourceNotifyList.h>            //kassem
+#include <asn/ngap/ASN_NGAP_PDUSessionResourceNotifyTransfer.h>        //kassem
+#include <asn/ngap/ASN_NGAP_QosFlowNotifyItem.h>                       //kassem
+#include <asn/ngap/ASN_NGAP_QosFlowNotifyList.h>                       //kassem
+#include <asn/ngap/ASN_NGAP_NotificationCause.h>                       //kassem
 namespace nr::gnb
 {
 
@@ -566,6 +573,58 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
             "[QNC] PDU session resource(s) modified for UE[%d] count[%d]", //kassem
             ue->ctxId, static_cast<int>(responseItems.size())); //kassem
     } //kassem
+} //kassem
+ 
+void NgapTask::sendQosFlowNotify(int ueId, int psi, int qfi, bool fulfilled) //kassem
+{ //kassem
+    auto *ue = findUeContext(ueId); //kassem
+    if (!ue) { //kassem
+        m_logger->err("[QNC] sendQosFlowNotify: UE %d not found", ueId); //kassem
+        return; //kassem
+    } //kassem
+ 
+    auto *notifyItem = asn::New<ASN_NGAP_QosFlowNotifyItem>(); //kassem
+    notifyItem->qosFlowIdentifier = //kassem
+        static_cast<ASN_NGAP_QosFlowIdentifier_t>(qfi); //kassem
+    notifyItem->notificationCause = fulfilled //kassem
+        ? ASN_NGAP_NotificationCause_fulfilled //kassem
+        : ASN_NGAP_NotificationCause_not_fulfilled; //kassem
+ 
+    auto *notifyTransfer = //kassem
+        asn::New<ASN_NGAP_PDUSessionResourceNotifyTransfer>(); //kassem
+    asn::SequenceAdd(notifyTransfer->qosFlowNotifyList, notifyItem); //kassem
+ 
+    OctetString encodedTransfer = ngap_encode::EncodeS( //kassem
+        asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, notifyTransfer); //kassem
+    if (encodedTransfer.length() == 0) { //kassem
+        m_logger->err("[QNC] PDUSessionResourceNotifyTransfer encoding failed"); //kassem
+        asn::Free(asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, //kassem
+                  notifyTransfer); //kassem
+        return; //kassem
+    } //kassem
+    asn::Free(asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, notifyTransfer); //kassem
+ 
+    auto *notifyListItem = asn::New<ASN_NGAP_PDUSessionResourceNotifyItem>(); //kassem
+    notifyListItem->pDUSessionID = //kassem
+        static_cast<ASN_NGAP_PDUSessionID_t>(psi); //kassem
+    asn::SetOctetString( //kassem
+        notifyListItem->pDUSessionResourceNotifyTransfer, encodedTransfer); //kassem
+ 
+    auto *ie = asn::New<ASN_NGAP_PDUSessionResourceNotifyIEs>(); //kassem
+    ie->id = ASN_NGAP_ProtocolIE_ID_id_PDUSessionResourceNotifyList; //kassem
+    ie->criticality = ASN_NGAP_Criticality_ignore; //kassem
+    ie->value.present = //kassem
+        ASN_NGAP_PDUSessionResourceNotifyIEs__value_PR_PDUSessionResourceNotifyList; //kassem
+    asn::SequenceAdd( //kassem
+        ie->value.choice.PDUSessionResourceNotifyList, notifyListItem); //kassem
+ 
+    auto *pdu = asn::ngap::NewMessagePdu<ASN_NGAP_PDUSessionResourceNotify>( //kassem
+        {ie}); //kassem
+    sendNgapUeAssociated(ue->ctxId, pdu); //kassem
+ 
+    m_logger->info( //kassem
+        "[QNC] Sent PDUSessionResourceNotify UE=%d PSI=%d QFI=%d cause=%s", //kassem
+        ueId, psi, qfi, fulfilled ? "fulfilled" : "not-fulfilled"); //kassem
 } //kassem
 
 } // namespace nr::gnb
