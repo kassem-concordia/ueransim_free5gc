@@ -414,61 +414,62 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
                 qncState.activeProfileIndex = 0; // start on primary profile //kassem
 
                 // ── Parse AlternativeQoSParaSetList ────────────────────── //kassem
-                // It lives in iE_Extensions as a ProtocolExtension item //kassem
-                // with id=220 (id_AlternativeQoSParaSetList). //kassem
-                // The container type is ProtocolExtensionContainer_174P96_t //kassem
-                // as confirmed by ASN_NGAP_GBR-QosInformation.c. //kassem
-                // We cast the opaque pointer to that typed container. //kassem
+                // ASN_NGAP_GBR_QosInformation_ExtIEs is only forward- //kassem
+                // declared in UERANSIM — no full struct definition exists. //kassem
+                // Re-encode the iE_Extensions bytes and decode them using //kassem
+                // the typed descriptor so asn1c handles field access. //kassem
                 if (gbrInfo->iE_Extensions) //kassem
                 { //kassem
-                    // Cast to the typed container the descriptor uses //kassem
-                    auto *extContainer = //kassem
-                        reinterpret_cast<ASN_NGAP_ProtocolExtensionContainer_174P96_t *>( //kassem
-                            gbrInfo->iE_Extensions); //kassem
-
-                    for (int iExt = 0; iExt < extContainer->list.count; iExt++) //kassem
+                    uint8_t *extBytes = nullptr; //kassem
+                    ssize_t extLen = 0; //kassem
+                    if (ngap_encode::Encode( //kassem
+                            asn_DEF_ASN_NGAP_ProtocolExtensionContainer_174P96, //kassem
+                            gbrInfo->iE_Extensions, extLen, extBytes)) //kassem
                     { //kassem
-                        auto *extIE = extContainer->list.array[iExt]; //kassem
-                        if (!extIE) continue; //kassem
-
-                        // id 220 = id_AlternativeQoSParaSetList (TS 38.413) //kassem
-                        if (extIE->id != 220) continue; //kassem
-
-                        // The list is an inline member of the choice union //kassem
-                        auto *altList = //kassem
-                            &extIE->extensionValue.choice.AlternativeQoSParaSetList; //kassem
-
-                        for (int iAlt = 0; iAlt < altList->list.count; iAlt++) //kassem
+                        auto *decoded = //kassem
+                            ngap_encode::Decode<ASN_NGAP_ProtocolExtensionContainer_174P96_t>( //kassem
+                                asn_DEF_ASN_NGAP_ProtocolExtensionContainer_174P96, //kassem
+                                extBytes, static_cast<size_t>(extLen)); //kassem
+                        free(extBytes); //kassem
+                        if (decoded) //kassem
                         { //kassem
-                            auto *altItem = altList->list.array[iAlt]; //kassem
-                            if (!altItem) continue; //kassem
-
-                            AltQosProfile prof{}; //kassem
-                            prof.index = static_cast<int>( //kassem
-                                altItem->alternativeQoSParaSetIndex); //kassem
-
-                            // gfbrDL and gfbrUL are optional pointers //kassem
-                            if (altItem->guaranteedFlowBitRateDL) //kassem
-                                asn::GetUnsigned64( //kassem
-                                    *altItem->guaranteedFlowBitRateDL, //kassem
-                                    prof.gfbrDl); //kassem
-                            if (altItem->guaranteedFlowBitRateUL) //kassem
-                                asn::GetUnsigned64( //kassem
-                                    *altItem->guaranteedFlowBitRateUL, //kassem
-                                    prof.gfbrUl); //kassem
-
-                            qncState.altProfiles.push_back(prof); //kassem
-
-                            m_logger->info( //kassem
-                                "[QNC] PSI=%d QFI=%d alt[%d] index=%d " //kassem
-                                "gfbrDL=%lu gfbrUL=%lu", //kassem
-                                psi, qfi, iAlt, prof.index, //kassem
-                                (unsigned long)prof.gfbrDl, //kassem
-                                (unsigned long)prof.gfbrUl); //kassem
+                            for (int iD = 0; iD < decoded->list.count; iD++) //kassem
+                            { //kassem
+                                auto *dItem = decoded->list.array[iD]; //kassem
+                                if (!dItem || dItem->id != 220) continue; //kassem
+                                auto *altList = //kassem
+                                    &dItem->extensionValue.choice.AlternativeQoSParaSetList; //kassem
+                                for (int iAlt = 0; iAlt < altList->list.count; iAlt++) //kassem
+                                { //kassem
+                                    auto *altItem = altList->list.array[iAlt]; //kassem
+                                    if (!altItem) continue; //kassem
+                                    AltQosProfile prof{}; //kassem
+                                    prof.index = static_cast<int>( //kassem
+                                        altItem->alternativeQoSParaSetIndex); //kassem
+                                    if (altItem->guaranteedFlowBitRateDL) //kassem
+                                        asn::GetUnsigned64( //kassem
+                                            *altItem->guaranteedFlowBitRateDL, //kassem
+                                            prof.gfbrDl); //kassem
+                                    if (altItem->guaranteedFlowBitRateUL) //kassem
+                                        asn::GetUnsigned64( //kassem
+                                            *altItem->guaranteedFlowBitRateUL, //kassem
+                                            prof.gfbrUl); //kassem
+                                    qncState.altProfiles.push_back(prof); //kassem
+                                    m_logger->info( //kassem
+                                        "[QNC] PSI=%d QFI=%d alt[%d] index=%d " //kassem
+                                        "gfbrDL=%lu gfbrUL=%lu", //kassem
+                                        psi, qfi, iAlt, prof.index, //kassem
+                                        (unsigned long)prof.gfbrDl, //kassem
+                                        (unsigned long)prof.gfbrUl); //kassem
+                                } //kassem
+                                break; //kassem
+                            } //kassem
+                            asn::Free( //kassem
+                                asn_DEF_ASN_NGAP_ProtocolExtensionContainer_174P96, //kassem
+                                decoded); //kassem
                         } //kassem
                     } //kassem
                 } //kassem
-
                 m_logger->info( //kassem
                     "[QNC] PSI=%d QFI=%d qnc=true altProfiles=%d stored", //kassem
                     psi, qfi, //kassem
