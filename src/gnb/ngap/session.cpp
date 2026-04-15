@@ -261,6 +261,7 @@ std::optional<NgapCause> NgapTask::setupPduSessionResource(NgapUeContext *ue, Pd
     m_base->gtpTask->push(std::move(w));
 
     ue->pduSessions.insert(resource->psi);
+    m_pduSessions[ue->ctxId][resource->psi] = resource; //kassem
 
     return {};
 }
