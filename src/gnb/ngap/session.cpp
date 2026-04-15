@@ -397,16 +397,26 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
                 // qosFlowLevelQosParameters is OPTIONAL in modify requests //kassem
                 // (it is absent if only the flow mapping changes) //kassem
                 auto *qosParams = flowItem->qosFlowLevelQosParameters; //kassem
-                if (!qosParams) continue; //kassem
+                if (!qosParams){ 
+                    m_logger->err("[QNC] QFI=%d SKIP: no qosFlowLevelQosParameters", //kassem
+                            (int)flowItem->qosFlowIdentifier);
+                    continue;
+                } //kassem
  
                 // Only GBR flows have gBR_QosInformation //kassem
                 auto *gbrInfo = qosParams->gBR_QosInformation; //kassem
-                if (!gbrInfo) continue; //kassem
+                if (!gbrInfo){  m_logger->err("[QNC] QFI=%d SKIP: no gBR_QosInformation", //kassem
+        (int)flowItem->qosFlowIdentifier);
+        continue;} //kassem
  
                 // Only process if NotificationControl is set //kassem
-                if (!gbrInfo->notificationControl) continue; //kassem
+                if (!gbrInfo->notificationControl){ m_logger->err("[QNC] QFI=%d SKIP: no notificationControl", //kassem
+        (int)flowItem->qosFlowIdentifier);
+        continue; } //kassem
                 if (*gbrInfo->notificationControl != //kassem
-                    ASN_NGAP_NotificationControl_notification_requested) continue; //kassem
+                    ASN_NGAP_NotificationControl_notification_requested) {m_logger->err("[QNC] QFI=%d SKIP: notificationControl value=%d", //kassem
+        (int)flowItem->qosFlowIdentifier, //kassem
+        (int)*gbrInfo->notificationControl);  continue; }//kassem
  
                 int qfi = static_cast<int>(flowItem->qosFlowIdentifier); //kassem
  
