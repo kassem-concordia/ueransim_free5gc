@@ -437,13 +437,11 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
                             prof.index = static_cast<int>( //kassem
                                 altItem->alternativeQoSParaSetIndex); //kassem
                             if (altItem->guaranteedFlowBitRateDL) //kassem
-                                asn::GetUnsigned64( //kassem
-                                    *altItem->guaranteedFlowBitRateDL, //kassem
-                                    prof.gfbrDl); //kassem
+                                prof.gfbrDl = asn::GetUnsigned64( //kassem
+                                    *altItem->guaranteedFlowBitRateDL); //kassem
                             if (altItem->guaranteedFlowBitRateUL) //kassem
-                                asn::GetUnsigned64( //kassem
-                                    *altItem->guaranteedFlowBitRateUL, //kassem
-                                    prof.gfbrUl); //kassem
+                                prof.gfbrUl = asn::GetUnsigned64( //kassem
+                                    *altItem->guaranteedFlowBitRateUL); //kassem
                             qncState.altProfiles.push_back(prof); //kassem
                             m_logger->info( //kassem
                                 "[QNC] PSI=%d QFI=%d alt[%d] " //kassem
