@@ -335,6 +335,7 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
     int amfId, ASN_NGAP_PDUSessionResourceModifyRequest *msg) //kassem
 { //kassem
     // Find which UE this message is for //kassem
+     m_logger->err("[QNC] *****************************kassem Enter");
     auto *ue = findUeByNgapIdPair(amfId, ngap_utils::FindNgapIdPair(msg)); //kassem
     if (ue == nullptr) //kassem
         return; //kassem
@@ -354,6 +355,7 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
     auto &sessionList = ieList->PDUSessionResourceModifyListModReq.list; //kassem
     for (int i = 0; i < sessionList.count; i++) //kassem
     { //kassem
+        m_logger->err("[QNC] *****************************kassem Enter for %d", i);
         auto *sessionItem = sessionList.array[i]; //kassem
         if (!sessionItem) continue; //kassem
  
@@ -419,6 +421,7 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
                 // which we now include — direct field access is safe. //kassem
                 if (gbrInfo->iE_Extensions) //kassem
                 { //kassem
+                    m_logger->err("[QNC] *****************************kassem Enter ie_extensions");
                     auto *extC = reinterpret_cast< //kassem
                         ASN_NGAP_ProtocolExtensionContainer_174P96_t *>( //kassem
                             gbrInfo->iE_Extensions); //kassem
@@ -431,6 +434,7 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
                                  .choice.AlternativeQoSParaSetList; //kassem
                         for (int iAlt = 0; iAlt < altList->list.count; iAlt++) //kassem
                         { //kassem
+                            m_logger->err("[QNC] *****************************kassem Enter for alternartive %d", iAlt);
                             auto *altItem = altList->list.array[iAlt]; //kassem
                             if (!altItem) continue; //kassem
                             AltQosProfile prof{}; //kassem
