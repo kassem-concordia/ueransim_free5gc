@@ -153,6 +153,7 @@ static OrderedMap<std::string, CmdEntry> g_gnbCmdEntries = {
     {"ue-count", {"Print the total number of UEs connected the this gNB", "", DefaultDesc, false}},
     {"ue-release", {"Request a UE context release for the given UE", "<ue-id>", DefaultDesc, false}},
     {"qnc-notify", {"Send QoS flow notification for a GBR flow", "<ue-id> <psi> <qfi> <fulfilled|not-fulfilled>", DefaultDesc, true}}, //kassem
+    {"qnc-notify-batch", {"Send QoS flow notifications to N UEs, M times each with hysteresis", "<psi> <qfi> <cause> <nb_ues> <nb_notif> <hysteresis_ms>", DefaultDesc, true}}, //kassem
 };
 
 static OrderedMap<std::string, CmdEntry> g_ueCmdEntries = {
