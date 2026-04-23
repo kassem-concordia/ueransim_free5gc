@@ -30,6 +30,7 @@ struct GnbCliCommand
         UE_COUNT,
         UE_RELEASE_REQ,
         QNC_NOTIFY, //kassem
+        QNC_NOTIFY_BATCH, //kassem
     } present;
 
     // AMF_INFO
@@ -40,6 +41,9 @@ struct GnbCliCommand
     int psi{};        //kassem
     int qfi{};        //kassem
     bool fulfilled{}; //kassem
+    int nbUes{};          //kassem: qnc-notify-batch
+    int nbNotif{};        //kassem: qnc-notify-batch
+    int hysteresisMs{};   //kassem: qnc-notify-batch
     explicit GnbCliCommand(PR present) : present(present)
     {
     }

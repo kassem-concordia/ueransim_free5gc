@@ -234,6 +234,27 @@ static std::unique_ptr<GnbCliCommand> GnbCliParseImpl(const std::string &subCmd,
         else CMD_ERR("Cause must be 'fulfilled' or 'not-fulfilled'") //kassem
         return cmd; //kassem
     } //kassem
+    else if (subCmd == "qnc-notify-batch") //kassem
+    { //kassem
+        auto cmd = std::make_unique<GnbCliCommand>(GnbCliCommand::QNC_NOTIFY_BATCH); //kassem
+        if (options.positionalCount() != 6) //kassem
+            CMD_ERR("Usage: qnc-notify-batch <psi> <qfi> <cause> <nb_ues> <nb_notif> <hysteresis_ms>") //kassem
+        cmd->psi = utils::ParseInt(options.getPositional(0)); //kassem
+        if (cmd->psi <= 0 || cmd->psi > 15) CMD_ERR("Invalid PSI") //kassem
+        cmd->qfi = utils::ParseInt(options.getPositional(1)); //kassem
+        if (cmd->qfi <= 0 || cmd->qfi > 63) CMD_ERR("Invalid QFI") //kassem
+        std::string cause = options.getPositional(2); //kassem
+        if (cause == "fulfilled") cmd->fulfilled = true; //kassem
+        else if (cause == "not-fulfilled") cmd->fulfilled = false; //kassem
+        else CMD_ERR("Cause must be 'fulfilled' or 'not-fulfilled'") //kassem
+        cmd->nbUes = utils::ParseInt(options.getPositional(3)); //kassem
+        if (cmd->nbUes <= 0) CMD_ERR("nb_ues must be positive") //kassem
+        cmd->nbNotif = utils::ParseInt(options.getPositional(4)); //kassem
+        if (cmd->nbNotif <= 0) CMD_ERR("nb_notif must be positive") //kassem
+        cmd->hysteresisMs = utils::ParseInt(options.getPositional(5)); //kassem
+        if (cmd->hysteresisMs < 0) CMD_ERR("hysteresis_ms must be >= 0") //kassem
+        return cmd; //kassem
+    } //kassem
 
     return nullptr;
 }

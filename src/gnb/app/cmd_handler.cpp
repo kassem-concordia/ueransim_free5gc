@@ -195,6 +195,69 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
             (fulfilled ? "fulfilled" : "not-fulfilled")); //kassem
         break; //kassem
     } //kassem
+    case app::GnbCliCommand::QNC_NOTIFY_BATCH: { //kassem
+        int psi          = msg.cmd->psi; //kassem
+        int qfi          = msg.cmd->qfi; //kassem
+        bool fulfilled   = msg.cmd->fulfilled; //kassem
+        int nbUes        = msg.cmd->nbUes; //kassem
+        int nbNotif      = msg.cmd->nbNotif; //kassem
+        int hysteresisMs = msg.cmd->hysteresisMs; //kassem
+ 
+        /* Collect UE IDs that have a valid QNC flow for this PSI/QFI */ //kassem
+        std::vector<int> targets; //kassem
+        for (auto &ue : m_base->ngapTask->m_ueCtx) { //kassem
+            int ueId = ue.first; //kassem
+            auto &pduSessions = m_base->ngapTask->m_pduSessions; //kassem
+            if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi)) //kassem
+                continue; //kassem
+            auto *resource = pduSessions.at(ueId).at(psi); //kassem
+            for (auto &flow : resource->qncFlows) { //kassem
+                if (flow.qfi == qfi && flow.qncEnabled) { //kassem
+                    targets.push_back(ueId); //kassem
+                    break; //kassem
+                } //kassem
+            } //kassem
+            if ((int)targets.size() >= nbUes) //kassem
+                break; //kassem
+        } //kassem
+ 
+        if (targets.empty()) { //kassem
+            sendError(msg.address, "No UEs with QNC-enabled flow found for given PSI/QFI"); //kassem
+            break; //kassem
+        } //kassem
+ 
+        int actualUes = (int)targets.size(); //kassem
+ 
+        /* Send nbNotif notifications to each UE with hysteresis between them */ //kassem
+        for (int n = 0; n < nbNotif; n++) { //kassem
+            for (int ueId : targets) { //kassem
+                auto &pduSessions = m_base->ngapTask->m_pduSessions; //kassem
+                auto *resource = pduSessions.at(ueId).at(psi); //kassem
+                for (auto &flow : resource->qncFlows) { //kassem
+                    if (flow.qfi == qfi && flow.qncEnabled) { //kassem
+                        if (!fulfilled && !flow.altProfiles.empty()) { //kassem
+                            flow.activeProfileIndex = //kassem
+                                (flow.activeProfileIndex + 1) % //kassem
+                                (static_cast<int>(flow.altProfiles.size()) + 1); //kassem
+                        } //kassem
+                        break; //kassem
+                    } //kassem
+                } //kassem
+                m_base->ngapTask->sendQosFlowNotify(ueId, psi, qfi, fulfilled); //kassem
+            } //kassem
+            /* Hysteresis between notification bursts */ //kassem
+            if (hysteresisMs > 0 && n < nbNotif - 1) //kassem
+                std::this_thread::sleep_for(std::chrono::milliseconds(hysteresisMs)); //kassem
+        } //kassem
+ 
+        std::string resultMsg = "Sent " + std::to_string(nbNotif) + //kassem
+            " x " + std::string(fulfilled ? "fulfilled" : "not-fulfilled") + //kassem
+            " to " + std::to_string(actualUes) + " UEs" + //kassem
+            " (PSI=" + std::to_string(psi) + " QFI=" + std::to_string(qfi) + //kassem
+            " hysteresis=" + std::to_string(hysteresisMs) + "ms)"; //kassem
+        sendResult(msg.address, resultMsg); //kassem
+        break; //kassem
+    } //kassem
     }
 }
 
