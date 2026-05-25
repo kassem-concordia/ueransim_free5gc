@@ -146,7 +146,12 @@ void NgapTask::receiveSessionResourceSetupRequest(int amfId, ASN_NGAP_PDUSession
             qncState.qfi = qfi; //kassem
             qncState.qncEnabled = false; //kassem
             qncState.activeProfileIndex = 0; //kassem
-
+             if (gbrInfo->notificationControl &&                                    //kassem
+            *gbrInfo->notificationControl ==                                   //kassem
+            ASN_NGAP_NotificationControl_notification_requested)               //kassem
+        {                                                                      //kassem
+            qncState.qncEnabled = true;                                        //kassem
+        }  
             if (gbrInfo->iE_Extensions) //kassem
             { //kassem
                 auto *extCont = reinterpret_cast<ASN_NGAP_ProtocolExtensionContainer_174P96_t *>( //kassem
