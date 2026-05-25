@@ -62,6 +62,7 @@
 #include <asn/ngap/ASN_NGAP_QosFlowNotifyItem.h>                       //kassem
 #include <asn/ngap/ASN_NGAP_QosFlowNotifyList.h>                       //kassem
 #include <asn/ngap/ASN_NGAP_NotificationCause.h>                       //kassem
+
 namespace nr::gnb
 {
 
@@ -146,16 +147,11 @@ void NgapTask::receiveSessionResourceSetupRequest(int amfId, ASN_NGAP_PDUSession
             qncState.qncEnabled = false; //kassem
             qncState.activeProfileIndex = 0; //kassem
 
-            if (gbrInfo->notificationControl && //kassem
-                *gbrInfo->notificationControl == //kassem
-                ASN_NGAP_NotificationControl_notification_requested) //kassem
-            { //kassem
-                qncState.qncEnabled = true; //kassem
-            } //kassem
-
             if (gbrInfo->iE_Extensions) //kassem
             { //kassem
-                auto &extList = gbrInfo->iE_Extensions->list; //kassem
+                auto *extCont = reinterpret_cast<ASN_NGAP_ProtocolExtensionContainer_174P96_t *>( //kassem
+                    gbrInfo->iE_Extensions); //kassem
+                auto &extList = extCont->list; //kassem
                 for (int iExt = 0; iExt < extList.count; iExt++) //kassem
                 { //kassem
                     auto *extIE = extList.array[iExt]; //kassem
