@@ -130,7 +130,69 @@ void NgapTask::receiveSessionResourceSetupRequest(int amfId, ASN_NGAP_PDUSession
 
                 resource->qosFlows = asn::WrapUnique(ptr, asn_DEF_ASN_NGAP_QosFlowSetupRequestList);
             }
+            if (ie) {        //kassem
+        auto &flowList = ie->QosFlowSetupRequestList.list; //kassem
+        for (int iFlow = 0; iFlow < flowList.count; iFlow++) //kassem
+        { //kassem
+            auto *flowItem = flowList.array[iFlow]; //kassem
+            if (!flowItem) continue; //kassem
+            int qfi = static_cast<int>(flowItem->qosFlowIdentifier); //kassem
+            auto *qosParams = &flowItem->qosFlowLevelQosParameters; //kassem
+            if (!qosParams->gBR_QosInformation) continue; //kassem
+            auto *gbrInfo = qosParams->gBR_QosInformation; //kassem
 
+            QosFlowQncState qncState{}; //kassem
+            qncState.qfi = qfi; //kassem
+            qncState.qncEnabled = false; //kassem
+            qncState.activeProfileIndex = 0; //kassem
+
+            if (gbrInfo->notificationControl && //kassem
+                *gbrInfo->notificationControl == //kassem
+                ASN_NGAP_NotificationControl_notification_requested) //kassem
+            { //kassem
+                qncState.qncEnabled = true; //kassem
+            } //kassem
+
+            if (gbrInfo->iE_Extensions) //kassem
+            { //kassem
+                auto &extList = gbrInfo->iE_Extensions->list; //kassem
+                for (int iExt = 0; iExt < extList.count; iExt++) //kassem
+                { //kassem
+                    auto *extIE = extList.array[iExt]; //kassem
+                    if (!extIE) continue; //kassem
+                    if (extIE->id != 220) continue; //kassem
+                    if (extIE->extensionValue.present != //kassem
+                        ASN_NGAP_GBR_QosInformation_ExtIEs__extensionValue_PR_AlternativeQoSParaSetList) //kassem
+                        continue; //kassem
+                    auto *altList = &extIE->extensionValue.choice.AlternativeQoSParaSetList; //kassem
+                    for (int iAlt = 0; iAlt < altList->list.count; iAlt++) //kassem
+                    { //kassem
+                        auto *altItem = altList->list.array[iAlt]; //kassem
+                        if (!altItem) continue; //kassem
+                        AltQosProfile prof{}; //kassem
+                        prof.index = static_cast<int>(altItem->alternativeQoSParaSetIndex); //kassem
+                        if (altItem->guaranteedFlowBitRateDL) //kassem
+                            prof.gfbrDl = asn::GetUnsigned64(*altItem->guaranteedFlowBitRateDL); //kassem
+                        if (altItem->guaranteedFlowBitRateUL) //kassem
+                            prof.gfbrUl = asn::GetUnsigned64(*altItem->guaranteedFlowBitRateUL); //kassem
+                        qncState.altProfiles.push_back(prof); //kassem
+                    } //kassem
+                } //kassem
+            } //kassem
+
+            if (qncState.qncEnabled) //kassem
+            { //kassem
+                resource->qncFlows.erase( //kassem
+                    std::remove_if(resource->qncFlows.begin(), resource->qncFlows.end(), //kassem
+                                [qfi](const QosFlowQncState &s) { return s.qfi == qfi; }), //kassem
+                    resource->qncFlows.end()); //kassem
+                resource->qncFlows.push_back(std::move(qncState)); //kassem
+                m_logger->info("[QNC] Setup: PSI=%d QFI=%d qnc=true altProfiles=%d", //kassem
+                    static_cast<int>(item->pDUSessionID), qfi, //kassem
+                    static_cast<int>(resource->qncFlows.back().altProfiles.size())); //kassem
+                    } //kassem
+                } //kassem
+        } //kassem
             auto error = setupPduSessionResource(ue, resource);
             if (error.has_value())
             {
