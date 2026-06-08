@@ -155,9 +155,9 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
         break;
     }
     case app::GnbCliCommand::QNC_NOTIFY: { //kassem
-        int ueId      = msg.cmd->ueId; //kassem
-        int psi       = msg.cmd->psi; //kassem
-        int qfi       = msg.cmd->qfi; //kassem
+        int ueId       = msg.cmd->ueId; //kassem
+        int psi        = msg.cmd->psi; //kassem
+        int qfi        = msg.cmd->qfi; //kassem
         bool fulfilled = msg.cmd->fulfilled; //kassem
 
         if (m_base->ngapTask->m_ueCtx.count(ueId) == 0) { //kassem
@@ -172,6 +172,11 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
         } //kassem
 
         auto *resource = pduSessions.at(ueId).at(psi); //kassem
+        if (!resource) { //kassem
+            sendError(msg.address, "PDU session resource is null"); //kassem
+            break; //kassem
+        } //kassem
+
         bool qncFound = false; //kassem
         for (auto &flow : resource->qncFlows) { //kassem
             if (flow.qfi == qfi && flow.qncEnabled) { //kassem
@@ -202,7 +207,7 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
         int nbUes        = msg.cmd->nbUes; //kassem
         int nbNotif      = msg.cmd->nbNotif; //kassem
         int hysteresisMs = msg.cmd->hysteresisMs; //kassem
- 
+
         /* Collect UE IDs that have a valid QNC flow for this PSI/QFI */ //kassem
         std::vector<int> targets; //kassem
         for (auto &ue : m_base->ngapTask->m_ueCtx) { //kassem
@@ -211,6 +216,8 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
             if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi)) //kassem
                 continue; //kassem
             auto *resource = pduSessions.at(ueId).at(psi); //kassem
+            if (!resource) //kassem
+                continue; //kassem
             for (auto &flow : resource->qncFlows) { //kassem
                 if (flow.qfi == qfi && flow.qncEnabled) { //kassem
                     targets.push_back(ueId); //kassem
@@ -220,21 +227,28 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
             if ((int)targets.size() >= nbUes) //kassem
                 break; //kassem
         } //kassem
- 
+
         if (targets.empty()) { //kassem
             sendError(msg.address, "No UEs with QNC-enabled flow found for given PSI/QFI"); //kassem
             break; //kassem
         } //kassem
- 
+
         int actualUes = (int)targets.size(); //kassem
- 
-        /* Send nbNotif notifications to each UE with hysteresis between them */ //kassem
+
+        /* Send nbNotif notifications to each UE */ //kassem
         for (int n = 0; n < nbNotif; n++) { //kassem
             for (int ueId : targets) { //kassem
                 auto &pduSessions = m_base->ngapTask->m_pduSessions; //kassem
+                /* Guard: UE may have released PDU session since targets was built */ //kassem
+                if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi)) //kassem
+                    continue; //kassem
                 auto *resource = pduSessions.at(ueId).at(psi); //kassem
+                if (!resource) //kassem
+                    continue; //kassem
+                bool qncFound = false; //kassem
                 for (auto &flow : resource->qncFlows) { //kassem
                     if (flow.qfi == qfi && flow.qncEnabled) { //kassem
+                        qncFound = true; //kassem
                         if (!fulfilled && !flow.altProfiles.empty()) { //kassem
                             flow.activeProfileIndex = //kassem
                                 (flow.activeProfileIndex + 1) % //kassem
@@ -243,13 +257,15 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
                         break; //kassem
                     } //kassem
                 } //kassem
+                if (!qncFound) //kassem
+                    continue; //kassem
                 m_base->ngapTask->sendQosFlowNotify(ueId, psi, qfi, fulfilled); //kassem
             } //kassem
             /* Hysteresis between notification bursts */ //kassem
             if (hysteresisMs > 0 && n < nbNotif - 1) //kassem
                 std::this_thread::sleep_for(std::chrono::milliseconds(hysteresisMs)); //kassem
         } //kassem
- 
+
         std::string resultMsg = "Sent " + std::to_string(nbNotif) + //kassem
             " x " + std::string(fulfilled ? "fulfilled" : "not-fulfilled") + //kassem
             " to " + std::to_string(actualUes) + " UEs" + //kassem
