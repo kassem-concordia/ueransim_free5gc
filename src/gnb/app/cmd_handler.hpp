@@ -10,6 +10,7 @@
 
 #include <gnb/nts.hpp>
 #include <gnb/types.hpp>
+#include <mutex>
 
 namespace nr::gnb
 {
@@ -18,6 +19,7 @@ class GnbCmdHandler
 {
   private:
     TaskBase *m_base;
+    std::mutex m_cmdMutex;
 
   public:
     explicit GnbCmdHandler(TaskBase *base) : m_base(base)

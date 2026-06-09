@@ -69,6 +69,7 @@ bool GnbCmdHandler::isAllPaused()
 
 void GnbCmdHandler::handleCmd(NmGnbCliCommand &msg)
 {
+    std::lock_guard<std::mutex> lock(m_cmdMutex);
     pauseTasks();
 
     uint64_t currentTime = utils::CurrentTimeMillis();
