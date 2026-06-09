@@ -41,6 +41,7 @@ struct GnbCliCommand
     int psi{};        //kassem
     int qfi{};        //kassem
     bool fulfilled{}; //kassem
+    int firstUeId{};
     int nbUes{};          //kassem: qnc-notify-batch
     int nbNotif{};        //kassem: qnc-notify-batch
     int hysteresisMs{};   //kassem: qnc-notify-batch

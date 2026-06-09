@@ -153,7 +153,7 @@ static OrderedMap<std::string, CmdEntry> g_gnbCmdEntries = {
     {"ue-count", {"Print the total number of UEs connected the this gNB", "", DefaultDesc, false}},
     {"ue-release", {"Request a UE context release for the given UE", "<ue-id>", DefaultDesc, false}},
     {"qnc-notify", {"Send QoS flow notification for a GBR flow", "<ue-id> <psi> <qfi> <fulfilled|not-fulfilled>", DefaultDesc, true}}, //kassem
-    {"qnc-notify-batch", {"Send QoS flow notifications to N UEs, M times each with hysteresis", "<psi> <qfi> <cause> <nb_ues> <nb_notif> <hysteresis_ms>", DefaultDesc, true}}, //kassem
+    {"qnc-notify-batch", {"Send QoS flow notifications to consecutive UEs starting from first_ue_id", "<first_ue_id> <nb_ues> <psi> <qfi> <cause> <nb_notif> <hysteresis_ms>", DefaultDesc, true}}, //kassem
 };
 
 static OrderedMap<std::string, CmdEntry> g_ueCmdEntries = {
@@ -238,21 +238,23 @@ static std::unique_ptr<GnbCliCommand> GnbCliParseImpl(const std::string &subCmd,
     else if (subCmd == "qnc-notify-batch") //kassem
     { //kassem
         auto cmd = std::make_unique<GnbCliCommand>(GnbCliCommand::QNC_NOTIFY_BATCH); //kassem
-        if (options.positionalCount() != 6) //kassem
-            CMD_ERR("Usage: qnc-notify-batch <psi> <qfi> <cause> <nb_ues> <nb_notif> <hysteresis_ms>") //kassem
-        cmd->psi = utils::ParseInt(options.getPositional(0)); //kassem
+        if (options.positionalCount() != 7) //kassem  ← was 6, now 7
+            CMD_ERR("Usage: qnc-notify-batch <first_ue_id> <nb_ues> <psi> <qfi> <cause> <nb_notif> <hysteresis_ms>") //kassem
+        cmd->firstUeId = utils::ParseInt(options.getPositional(0)); //kassem  ← new
+        if (cmd->firstUeId <= 0) CMD_ERR("first_ue_id must be positive") //kassem
+        cmd->nbUes = utils::ParseInt(options.getPositional(1)); //kassem
+        if (cmd->nbUes <= 0) CMD_ERR("nb_ues must be positive") //kassem
+        cmd->psi = utils::ParseInt(options.getPositional(2)); //kassem
         if (cmd->psi <= 0 || cmd->psi > 15) CMD_ERR("Invalid PSI") //kassem
-        cmd->qfi = utils::ParseInt(options.getPositional(1)); //kassem
+        cmd->qfi = utils::ParseInt(options.getPositional(3)); //kassem
         if (cmd->qfi <= 0 || cmd->qfi > 63) CMD_ERR("Invalid QFI") //kassem
-        std::string cause = options.getPositional(2); //kassem
+        std::string cause = options.getPositional(4); //kassem
         if (cause == "fulfilled") cmd->fulfilled = true; //kassem
         else if (cause == "not-fulfilled") cmd->fulfilled = false; //kassem
         else CMD_ERR("Cause must be 'fulfilled' or 'not-fulfilled'") //kassem
-        cmd->nbUes = utils::ParseInt(options.getPositional(3)); //kassem
-        if (cmd->nbUes <= 0) CMD_ERR("nb_ues must be positive") //kassem
-        cmd->nbNotif = utils::ParseInt(options.getPositional(4)); //kassem
+        cmd->nbNotif = utils::ParseInt(options.getPositional(5)); //kassem
         if (cmd->nbNotif <= 0) CMD_ERR("nb_notif must be positive") //kassem
-        cmd->hysteresisMs = utils::ParseInt(options.getPositional(5)); //kassem
+        cmd->hysteresisMs = utils::ParseInt(options.getPositional(6)); //kassem
         if (cmd->hysteresisMs < 0) CMD_ERR("hysteresis_ms must be >= 0") //kassem
         return cmd; //kassem
     } //kassem
