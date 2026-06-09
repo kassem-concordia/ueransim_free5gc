@@ -142,6 +142,8 @@ void NgapTask::deleteUeContext(int ueId)
         delete ue;
         m_ueCtx.erase(ueId);
     }
+    // Clean up any remaining session entries (GTP owns and frees the objects)
+    m_pduSessions.erase(ueId);
 }
 
 void NgapTask::deleteAmfContext(int amfId)

@@ -376,6 +376,9 @@ void NgapTask::receiveSessionResourceReleaseCommand(int amfId, ASN_NGAP_PDUSessi
         m_base->gtpTask->push(std::move(w));
 
         ue->pduSessions.erase(psi);
+        // Remove raw pointer before GTP deletes the object; prevents dangling pointer
+        if (m_pduSessions.count(ue->ctxId))
+            m_pduSessions[ue->ctxId].erase(psi);
     }
 
     for (auto &psi : psIds)
