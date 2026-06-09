@@ -682,6 +682,7 @@ void NgapTask::sendQosFlowNotify(int ueId, int psi, int qfi, bool fulfilled)
     if (!notifyTransfer->qosFlowNotifyList)
     {
         m_logger->err("[QNC-DEBUG] call#%d ABORT: failed to alloc QosFlowNotifyList", myCall);
+        asn::Free(asn_DEF_ASN_NGAP_QosFlowNotifyItem, notifyItem);
         asn::Free(asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, notifyTransfer);
         return;
     }

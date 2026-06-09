@@ -306,10 +306,29 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
  
             QLOG("BATCH burst %d/%d END (sent=%d skipped=%d noQnc=%d)",
                  n + 1, nbNotif, sentCount, skippedCount, noQncCount);
- 
+
             if (hysteresisMs > 0 && n < nbNotif - 1)
             {
+                // Release pause during sleep so SCTP/NGAP can process heartbeats
+                // and keep the AMF connection alive.  Re-acquire before next burst.
+                unpauseTasks();
                 std::this_thread::sleep_for(std::chrono::milliseconds(hysteresisMs));
+                pauseTasks();
+
+                uint64_t repauseEnd = utils::CurrentTimeMillis() + PAUSE_CONFIRM_TIMEOUT;
+                bool repaused = false;
+                while (utils::CurrentTimeMillis() < repauseEnd)
+                {
+                    if (isAllPaused()) { repaused = true; break; }
+                    utils::Sleep(PAUSE_POLLING);
+                }
+                if (!repaused)
+                {
+                    QLOG("BATCH burst %d: re-pause timed out, aborting", n + 1);
+                    sendError(msg.address, "Batch aborted: re-pause timed out after burst " +
+                                          std::to_string(n + 1));
+                    return;
+                }
             }
         }
  
