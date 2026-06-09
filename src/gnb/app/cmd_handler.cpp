@@ -69,7 +69,7 @@ bool GnbCmdHandler::isAllPaused()
 
 void GnbCmdHandler::handleCmd(NmGnbCliCommand &msg)
 {
-    std::lock_guard<std::mutex> lock(m_cmdMutex);
+    
     pauseTasks();
 
     uint64_t currentTime = utils::CurrentTimeMillis();
@@ -220,117 +220,44 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
     }
  
     case app::GnbCliCommand::QNC_NOTIFY_BATCH: {
+        int firstUeId    = msg.cmd->firstUeId;   // ← new: start of consecutive range
+        int nbUes        = msg.cmd->nbUes;
         int psi          = msg.cmd->psi;
         int qfi          = msg.cmd->qfi;
         bool fulfilled   = msg.cmd->fulfilled;
-        int nbUes        = msg.cmd->nbUes;
         int nbNotif      = msg.cmd->nbNotif;
         int hysteresisMs = msg.cmd->hysteresisMs;
  
-        // ── STEP 0: log entry parameters ─────────────────────────────
-        QLOG("BATCH ENTER psi=%d qfi=%d fulfilled=%d nbUes=%d nbNotif=%d hysteresis=%dms",
-             psi, qfi, (int)fulfilled, nbUes, nbNotif, hysteresisMs);
+        QLOG("BATCH ENTER firstUeId=%d nbUes=%d psi=%d qfi=%d fulfilled=%d nbNotif=%d hysteresis=%dms",
+             firstUeId, nbUes, psi, qfi, (int)fulfilled, nbNotif, hysteresisMs);
  
-        if (hysteresisMs <= 0)
-            QLOG("BATCH WARNING: hysteresisMs=%d — no sleep between bursts!", hysteresisMs);
- 
-        // ── STEP 1: snapshot current system state ─────────────────────
-        int totalUes      = (int)m_base->ngapTask->m_ueCtx.size();
-        int totalSessions = 0;
-        for (auto &u : m_base->ngapTask->m_pduSessions)
-            totalSessions += (int)u.second.size();
-        QLOG("BATCH STEP1: active UEs=%d active PDU sessions=%d", totalUes, totalSessions);
- 
-        // ── STEP 2: collect eligible target UEs ───────────────────────
-        std::vector<int> targets;
-        for (auto &ue : m_base->ngapTask->m_ueCtx)
-        {
-            int ueId = ue.first;
-            auto &pduSessions = m_base->ngapTask->m_pduSessions;
- 
-            if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi))
-            {
-                QLOG("BATCH STEP2: UE=%d SKIP — no PDU session PSI=%d", ueId, psi);
-                continue;
-            }
- 
-            auto *resource = pduSessions.at(ueId).at(psi);
-            if (!resource)
-            {
-                QLOG("BATCH STEP2: UE=%d SKIP — resource null PSI=%d", ueId, psi);
-                continue;
-            }
- 
-            QLOG("BATCH STEP2: UE=%d PSI=%d found, qncFlows count=%d",
-                 ueId, psi, (int)resource->qncFlows.size());
- 
-            bool found = false;
-            for (auto &flow : resource->qncFlows)
-            {
-                QLOG("BATCH STEP2: UE=%d checking flow qfi=%d qncEnabled=%d",
-                     ueId, flow.qfi, (int)flow.qncEnabled);
-                if (flow.qfi == qfi && flow.qncEnabled)
-                {
-                    found = true;
-                    break;
-                }
-            }
- 
-            if (!found)
-            {
-                QLOG("BATCH STEP2: UE=%d SKIP — no QNC flow QFI=%d", ueId, qfi);
-                continue;
-            }
- 
-            targets.push_back(ueId);
-            QLOG("BATCH STEP2: UE=%d ADDED (targets so far=%d)", ueId, (int)targets.size());
- 
-            if ((int)targets.size() >= nbUes)
-            {
-                QLOG("BATCH STEP2: reached nbUes=%d cap, stopping collection", nbUes);
-                break;
-            }
-        }
- 
-        QLOG("BATCH STEP2 DONE: collected=%d requested=%d", (int)targets.size(), nbUes);
- 
-        if (targets.empty())
-        {
-            QLOG("BATCH ABORT: no eligible targets found");
-            sendError(msg.address, "No UEs with QNC-enabled flow found for given PSI/QFI");
-            break;
-        }
- 
-        int actualUes          = (int)targets.size();
-        int totalNotifExpected = nbNotif * actualUes;
-        QLOG("BATCH STEP2: plan — %d bursts x %d UEs = %d total notifications",
-             nbNotif, actualUes, totalNotifExpected);
- 
-        // ── STEP 3: notification loop ─────────────────────────────────
+        // ── STEP 1: build target list from consecutive range ──────────
+        // No m_ueCtx iteration — IDs are explicit, no race condition
         int sentCount    = 0;
         int skippedCount = 0;
+        int noQncCount   = 0;
  
         for (int n = 0; n < nbNotif; n++)
         {
-            QLOG("BATCH STEP3: burst %d/%d START (sent=%d skipped=%d)",
-                 n + 1, nbNotif, sentCount, skippedCount);
+            QLOG("BATCH burst %d/%d START", n + 1, nbNotif);
  
-            for (int ueId : targets)
+            for (int i = 0; i < nbUes; i++)
             {
-                auto &pduSessions = m_base->ngapTask->m_pduSessions;
+                int ueId = firstUeId + i;
  
-                // guard 1: UE still registered
+                // guard 1: UE exists
                 if (m_base->ngapTask->m_ueCtx.count(ueId) == 0)
                 {
-                    QLOG("BATCH burst=%d UE=%d SKIP — no longer in m_ueCtx", n + 1, ueId);
+                    QLOG("BATCH burst=%d UE=%d SKIP — not registered", n + 1, ueId);
                     skippedCount++;
                     continue;
                 }
  
-                // guard 2: PDU session still alive
+                // guard 2: PDU session exists
+                auto &pduSessions = m_base->ngapTask->m_pduSessions;
                 if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi))
                 {
-                    QLOG("BATCH burst=%d UE=%d SKIP — PDU session gone PSI=%d", n + 1, ueId, psi);
+                    QLOG("BATCH burst=%d UE=%d SKIP — no PDU session PSI=%d", n + 1, ueId, psi);
                     skippedCount++;
                     continue;
                 }
@@ -343,7 +270,7 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
                     continue;
                 }
  
-                // guard 3: QNC flow still active
+                // guard 3: QNC flow active
                 bool qncFound = false;
                 for (auto &flow : resource->qncFlows)
                 {
@@ -364,43 +291,42 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
  
                 if (!qncFound)
                 {
-                    QLOG("BATCH burst=%d UE=%d SKIP — QNC flow gone QFI=%d", n + 1, ueId, qfi);
-                    skippedCount++;
+                    // print but don't abort — skip silently with a log
+                    QLOG("BATCH burst=%d UE=%d SKIP — no QNC flow QFI=%d (qncFlows=%d)",
+                         n + 1, ueId, qfi, (int)resource->qncFlows.size());
+                    noQncCount++;
                     continue;
                 }
  
                 // all guards passed — send
-                QLOG("BATCH burst=%d UE=%d SENDING PSI=%d QFI=%d", n + 1, ueId, psi, qfi);
                 m_base->ngapTask->sendQosFlowNotify(ueId, psi, qfi, fulfilled);
                 sentCount++;
                 QLOG("BATCH burst=%d UE=%d SENT OK (total sent=%d)", n + 1, ueId, sentCount);
             }
  
-            QLOG("BATCH STEP3: burst %d/%d END (sent=%d skipped=%d)",
-                 n + 1, nbNotif, sentCount, skippedCount);
+            QLOG("BATCH burst %d/%d END (sent=%d skipped=%d noQnc=%d)",
+                 n + 1, nbNotif, sentCount, skippedCount, noQncCount);
  
-            // hysteresis between bursts
             if (hysteresisMs > 0 && n < nbNotif - 1)
             {
-                QLOG("BATCH sleeping %dms ...", hysteresisMs);
                 std::this_thread::sleep_for(std::chrono::milliseconds(hysteresisMs));
-                QLOG("BATCH sleep done");
             }
         }
  
-        // ── STEP 4: summary ───────────────────────────────────────────
-        QLOG("BATCH DONE sent=%d skipped=%d expected=%d UEs=%d bursts=%d",
-             sentCount, skippedCount, totalNotifExpected, actualUes, nbNotif);
+        // ── summary ───────────────────────────────────────────────────
+        QLOG("BATCH DONE sent=%d skipped=%d noQnc=%d firstUeId=%d nbUes=%d bursts=%d",
+             sentCount, skippedCount, noQncCount, firstUeId, nbUes, nbNotif);
  
         std::string resultMsg =
             "Sent " + std::to_string(sentCount) +
-            "/" + std::to_string(totalNotifExpected) +
+            "/" + std::to_string(nbNotif * nbUes) +
             (fulfilled ? " fulfilled" : " not-fulfilled") +
-            " notifications to " + std::to_string(actualUes) + " UEs" +
-            " (PSI=" + std::to_string(psi) +
+            " (firstUeId=" + std::to_string(firstUeId) +
+            " nbUes=" + std::to_string(nbUes) +
+            " PSI=" + std::to_string(psi) +
             " QFI=" + std::to_string(qfi) +
-            " hysteresis=" + std::to_string(hysteresisMs) + "ms" +
-            " skipped=" + std::to_string(skippedCount) + ")";
+            " skipped=" + std::to_string(skippedCount) +
+            " noQnc=" + std::to_string(noQncCount) + ")";
         sendResult(msg.address, resultMsg);
         break;
     }
