@@ -19,7 +19,8 @@
 
 #define PAUSE_CONFIRM_TIMEOUT 3000
 #define PAUSE_POLLING 10
-
+#define QLOG(fmt, ...) \
+    m_base->ngapTask->m_logger->err("[QNC-DEBUG %s:%d] " fmt, __func__, __LINE__, ##__VA_ARGS__)
 namespace nr::gnb
 {
 
