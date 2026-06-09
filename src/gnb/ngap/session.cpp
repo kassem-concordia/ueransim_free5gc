@@ -638,57 +638,112 @@ void NgapTask::receiveSessionResourceModifyRequest( //kassem
     } //kassem
 } //kassem
  
-void NgapTask::sendQosFlowNotify(int ueId, int psi, int qfi, bool fulfilled) //kassem
-{ //kassem
-    auto *ue = findUeContext(ueId); //kassem
-    if (!ue) { //kassem
-        m_logger->err("[QNC] sendQosFlowNotify: UE %d not found", ueId); //kassem
-        return; //kassem
-    } //kassem
+void NgapTask::sendQosFlowNotify(int ueId, int psi, int qfi, bool fulfilled)
+{
+    // ── STEP 0: global call counter so we can track total invocations ──
+    static std::atomic<int> s_callCount{0};
+    int myCall = ++s_callCount;
+    m_logger->err("[QNC-DEBUG] sendQosFlowNotify ENTER call#%d UE=%d PSI=%d QFI=%d fulfilled=%d",
+                  myCall, ueId, psi, qfi, (int)fulfilled);
  
-    auto *notifyItem = asn::New<ASN_NGAP_QosFlowNotifyItem>(); //kassem
-    notifyItem->qosFlowIdentifier = //kassem
-        static_cast<ASN_NGAP_QosFlowIdentifier_t>(qfi); //kassem
-    notifyItem->notificationCause = fulfilled //kassem
-        ? ASN_NGAP_NotificationCause_fulfilled //kassem
-        : ASN_NGAP_NotificationCause_not_fulfilled; //kassem
+    // ── STEP 1: UE lookup ─────────────────────────────────────────────
+    auto *ue = findUeContext(ueId);
+    if (!ue)
+    {
+        m_logger->err("[QNC-DEBUG] call#%d ABORT: UE=%d not found in context", myCall, ueId);
+        return;
+    }
+    m_logger->err("[QNC-DEBUG] call#%d STEP1 OK: UE=%d found ctxId=%d", myCall, ueId, ue->ctxId);
  
-    auto *notifyTransfer = //kassem
-        asn::New<ASN_NGAP_PDUSessionResourceNotifyTransfer>(); //kassem
+    // ── STEP 2: allocate QosFlowNotifyItem ────────────────────────────
+    auto *notifyItem = asn::New<ASN_NGAP_QosFlowNotifyItem>();
+    if (!notifyItem)
+    {
+        m_logger->err("[QNC-DEBUG] call#%d ABORT: failed to alloc QosFlowNotifyItem", myCall);
+        return;
+    }
+    notifyItem->qosFlowIdentifier =
+        static_cast<ASN_NGAP_QosFlowIdentifier_t>(qfi);
+    notifyItem->notificationCause = fulfilled
+        ? ASN_NGAP_NotificationCause_fulfilled
+        : ASN_NGAP_NotificationCause_not_fulfilled;
+    m_logger->err("[QNC-DEBUG] call#%d STEP2 OK: QosFlowNotifyItem allocated qfi=%d cause=%s",
+                  myCall, qfi, fulfilled ? "fulfilled" : "not-fulfilled");
+ 
+    // ── STEP 3: allocate + populate NotifyTransfer ────────────────────
+    auto *notifyTransfer = asn::New<ASN_NGAP_PDUSessionResourceNotifyTransfer>();
+    if (!notifyTransfer)
+    {
+        m_logger->err("[QNC-DEBUG] call#%d ABORT: failed to alloc NotifyTransfer", myCall);
+        asn::Free(asn_DEF_ASN_NGAP_QosFlowNotifyItem, notifyItem);
+        return;
+    }
     notifyTransfer->qosFlowNotifyList = asn::New<ASN_NGAP_QosFlowNotifyList>();
-    asn::SequenceAdd(*notifyTransfer->qosFlowNotifyList, notifyItem); //kassem //kassem
+    if (!notifyTransfer->qosFlowNotifyList)
+    {
+        m_logger->err("[QNC-DEBUG] call#%d ABORT: failed to alloc QosFlowNotifyList", myCall);
+        asn::Free(asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, notifyTransfer);
+        return;
+    }
+    asn::SequenceAdd(*notifyTransfer->qosFlowNotifyList, notifyItem);
+    m_logger->err("[QNC-DEBUG] call#%d STEP3 OK: NotifyTransfer populated", myCall);
  
-    OctetString encodedTransfer = ngap_encode::EncodeS( //kassem
-        asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, notifyTransfer); //kassem
-    if (encodedTransfer.length() == 0) { //kassem
-        m_logger->err("[QNC] PDUSessionResourceNotifyTransfer encoding failed"); //kassem
-        asn::Free(asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, //kassem
-                  notifyTransfer); //kassem
-        return; //kassem
-    } //kassem
-    asn::Free(asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, notifyTransfer); //kassem
+    // ── STEP 4: encode the transfer ───────────────────────────────────
+    OctetString encodedTransfer = ngap_encode::EncodeS(
+        asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, notifyTransfer);
+    m_logger->err("[QNC-DEBUG] call#%d STEP4: encoded length=%zu", myCall, encodedTransfer.length());
+    if (encodedTransfer.length() == 0)
+    {
+        m_logger->err("[QNC-DEBUG] call#%d ABORT: encoding failed", myCall);
+        asn::Free(asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, notifyTransfer);
+        return;
+    }
+    asn::Free(asn_DEF_ASN_NGAP_PDUSessionResourceNotifyTransfer, notifyTransfer);
+    m_logger->err("[QNC-DEBUG] call#%d STEP4 OK: transfer encoded and freed", myCall);
  
-    auto *notifyListItem = asn::New<ASN_NGAP_PDUSessionResourceNotifyItem>(); //kassem
-    notifyListItem->pDUSessionID = //kassem
-        static_cast<ASN_NGAP_PDUSessionID_t>(psi); //kassem
-    asn::SetOctetString( //kassem
-        notifyListItem->pDUSessionResourceNotifyTransfer, encodedTransfer); //kassem
+    // ── STEP 5: build PDUSessionResourceNotifyItem ────────────────────
+    auto *notifyListItem = asn::New<ASN_NGAP_PDUSessionResourceNotifyItem>();
+    if (!notifyListItem)
+    {
+        m_logger->err("[QNC-DEBUG] call#%d ABORT: failed to alloc NotifyListItem", myCall);
+        return;
+    }
+    notifyListItem->pDUSessionID = static_cast<ASN_NGAP_PDUSessionID_t>(psi);
+    asn::SetOctetString(notifyListItem->pDUSessionResourceNotifyTransfer, encodedTransfer);
+    m_logger->err("[QNC-DEBUG] call#%d STEP5 OK: NotifyListItem built PSI=%d", myCall, psi);
  
-    auto *ie = asn::New<ASN_NGAP_PDUSessionResourceNotifyIEs>(); //kassem
-    ie->id = ASN_NGAP_ProtocolIE_ID_id_PDUSessionResourceNotifyList; //kassem
-    ie->criticality = ASN_NGAP_Criticality_ignore; //kassem
-    ie->value.present = //kassem
-        ASN_NGAP_PDUSessionResourceNotifyIEs__value_PR_PDUSessionResourceNotifyList; //kassem
-    asn::SequenceAdd( //kassem
-        ie->value.choice.PDUSessionResourceNotifyList, notifyListItem); //kassem
+    // ── STEP 6: build the IE wrapper ──────────────────────────────────
+    auto *ie = asn::New<ASN_NGAP_PDUSessionResourceNotifyIEs>();
+    if (!ie)
+    {
+        m_logger->err("[QNC-DEBUG] call#%d ABORT: failed to alloc IE", myCall);
+        asn::Free(asn_DEF_ASN_NGAP_PDUSessionResourceNotifyItem, notifyListItem);
+        return;
+    }
+    ie->id          = ASN_NGAP_ProtocolIE_ID_id_PDUSessionResourceNotifyList;
+    ie->criticality = ASN_NGAP_Criticality_ignore;
+    ie->value.present =
+        ASN_NGAP_PDUSessionResourceNotifyIEs__value_PR_PDUSessionResourceNotifyList;
+    asn::SequenceAdd(ie->value.choice.PDUSessionResourceNotifyList, notifyListItem);
+    m_logger->err("[QNC-DEBUG] call#%d STEP6 OK: IE wrapper built", myCall);
  
-    auto *pdu = asn::ngap::NewMessagePdu<ASN_NGAP_PDUSessionResourceNotify>( //kassem
-        {ie}); //kassem
-    sendNgapUeAssociated(ue->ctxId, pdu); //kassem
+    // ── STEP 7: build the full PDU ────────────────────────────────────
+    auto *pdu = asn::ngap::NewMessagePdu<ASN_NGAP_PDUSessionResourceNotify>({ie});
+    if (!pdu)
+    {
+        m_logger->err("[QNC-DEBUG] call#%d ABORT: NewMessagePdu returned null", myCall);
+        return;
+    }
+    m_logger->err("[QNC-DEBUG] call#%d STEP7 OK: PDU built, about to send to SCTP", myCall);
  
-    m_logger->info( //kassem
-        "[QNC] Sent PDUSessionResourceNotify UE=%d PSI=%d QFI=%d cause=%s", //kassem
-        ueId, psi, qfi, fulfilled ? "fulfilled" : "not-fulfilled"); //kassem
-} //kassem
-
-} // namespace nr::gnb
+    // ── STEP 8: hand off to NGAP/SCTP ─────────────────────────────────
+    sendNgapUeAssociated(ue->ctxId, pdu);
+    m_logger->err("[QNC-DEBUG] call#%d STEP8 OK: sendNgapUeAssociated returned (queued)", myCall);
+ 
+    m_logger->info("[QNC] Sent PDUSessionResourceNotify UE=%d PSI=%d QFI=%d cause=%s",
+                   ueId, psi, qfi, fulfilled ? "fulfilled" : "not-fulfilled");
+ 
+    m_logger->err("[QNC-DEBUG] sendQosFlowNotify EXIT call#%d", myCall);
+}
+ 
+ 

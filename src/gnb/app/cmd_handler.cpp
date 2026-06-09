@@ -154,127 +154,256 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
         }
         break;
     }
-    case app::GnbCliCommand::QNC_NOTIFY: { //kassem
-        int ueId       = msg.cmd->ueId; //kassem
-        int psi        = msg.cmd->psi; //kassem
-        int qfi        = msg.cmd->qfi; //kassem
-        bool fulfilled = msg.cmd->fulfilled; //kassem
-
-        if (m_base->ngapTask->m_ueCtx.count(ueId) == 0) { //kassem
-            sendError(msg.address, "UE not found with given ID"); //kassem
-            break; //kassem
-        } //kassem
-
-        auto &pduSessions = m_base->ngapTask->m_pduSessions; //kassem
-        if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi)) { //kassem
-            sendError(msg.address, "PDU session not found for given UE/PSI"); //kassem
-            break; //kassem
-        } //kassem
-
-        auto *resource = pduSessions.at(ueId).at(psi); //kassem
-        if (!resource) { //kassem
-            sendError(msg.address, "PDU session resource is null"); //kassem
-            break; //kassem
-        } //kassem
-
-        bool qncFound = false; //kassem
-        for (auto &flow : resource->qncFlows) { //kassem
-            if (flow.qfi == qfi && flow.qncEnabled) { //kassem
-                qncFound = true; //kassem
-                if (!fulfilled && !flow.altProfiles.empty()) { //kassem
-                    flow.activeProfileIndex = //kassem
-                        (flow.activeProfileIndex + 1) % //kassem
-                        (static_cast<int>(flow.altProfiles.size()) + 1); //kassem
-                } //kassem
-                break; //kassem
-            } //kassem
-        } //kassem
-
-        if (!qncFound) { //kassem
-            sendError(msg.address, "QFI not found or QNC not enabled for this flow"); //kassem
-            break; //kassem
-        } //kassem
-
-        m_base->ngapTask->sendQosFlowNotify(ueId, psi, qfi, fulfilled); //kassem
-        sendResult(msg.address, std::string("Sent QoS flow notify: ") + //kassem
-            (fulfilled ? "fulfilled" : "not-fulfilled")); //kassem
-        break; //kassem
-    } //kassem
-    case app::GnbCliCommand::QNC_NOTIFY_BATCH: { //kassem
-        int psi          = msg.cmd->psi; //kassem
-        int qfi          = msg.cmd->qfi; //kassem
-        bool fulfilled   = msg.cmd->fulfilled; //kassem
-        int nbUes        = msg.cmd->nbUes; //kassem
-        int nbNotif      = msg.cmd->nbNotif; //kassem
-        int hysteresisMs = msg.cmd->hysteresisMs; //kassem
-
-        /* Collect UE IDs that have a valid QNC flow for this PSI/QFI */ //kassem
-        std::vector<int> targets; //kassem
-        for (auto &ue : m_base->ngapTask->m_ueCtx) { //kassem
-            int ueId = ue.first; //kassem
-            auto &pduSessions = m_base->ngapTask->m_pduSessions; //kassem
-            if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi)) //kassem
-                continue; //kassem
-            auto *resource = pduSessions.at(ueId).at(psi); //kassem
-            if (!resource) //kassem
-                continue; //kassem
-            for (auto &flow : resource->qncFlows) { //kassem
-                if (flow.qfi == qfi && flow.qncEnabled) { //kassem
-                    targets.push_back(ueId); //kassem
-                    break; //kassem
-                } //kassem
-            } //kassem
-            if ((int)targets.size() >= nbUes) //kassem
-                break; //kassem
-        } //kassem
-
-        if (targets.empty()) { //kassem
-            sendError(msg.address, "No UEs with QNC-enabled flow found for given PSI/QFI"); //kassem
-            break; //kassem
-        } //kassem
-
-        int actualUes = (int)targets.size(); //kassem
-
-        /* Send nbNotif notifications to each UE */ //kassem
-        for (int n = 0; n < nbNotif; n++) { //kassem
-            for (int ueId : targets) { //kassem
-                auto &pduSessions = m_base->ngapTask->m_pduSessions; //kassem
-                /* Guard: UE may have released PDU session since targets was built */ //kassem
-                if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi)) //kassem
-                    continue; //kassem
-                auto *resource = pduSessions.at(ueId).at(psi); //kassem
-                if (!resource) //kassem
-                    continue; //kassem
-                bool qncFound = false; //kassem
-                for (auto &flow : resource->qncFlows) { //kassem
-                    if (flow.qfi == qfi && flow.qncEnabled) { //kassem
-                        qncFound = true; //kassem
-                        if (!fulfilled && !flow.altProfiles.empty()) { //kassem
-                            flow.activeProfileIndex = //kassem
-                                (flow.activeProfileIndex + 1) % //kassem
-                                (static_cast<int>(flow.altProfiles.size()) + 1); //kassem
-                        } //kassem
-                        break; //kassem
-                    } //kassem
-                } //kassem
-                if (!qncFound) //kassem
-                    continue; //kassem
-                m_base->ngapTask->sendQosFlowNotify(ueId, psi, qfi, fulfilled); //kassem
-            } //kassem
-            /* Hysteresis between notification bursts */ //kassem
-            if (hysteresisMs > 0 && n < nbNotif - 1) //kassem
-                std::this_thread::sleep_for(std::chrono::milliseconds(hysteresisMs)); //kassem
-        } //kassem
-
-        std::string resultMsg = "Sent " + std::to_string(nbNotif) + //kassem
-            " x " + std::string(fulfilled ? "fulfilled" : "not-fulfilled") + //kassem
-            " to " + std::to_string(actualUes) + " UEs" + //kassem
-            " (PSI=" + std::to_string(psi) + " QFI=" + std::to_string(qfi) + //kassem
-            " hysteresis=" + std::to_string(hysteresisMs) + "ms)"; //kassem
-        sendResult(msg.address, resultMsg); //kassem
-        break; //kassem
-    } //kassem
+    case app::GnbCliCommand::QNC_NOTIFY: {
+        int ueId       = msg.cmd->ueId;
+        int psi        = msg.cmd->psi;
+        int qfi        = msg.cmd->qfi;
+        bool fulfilled = msg.cmd->fulfilled;
+ 
+        QLOG("QNC_NOTIFY ENTER ueId=%d psi=%d qfi=%d fulfilled=%d",
+             ueId, psi, qfi, (int)fulfilled);
+ 
+        if (m_base->ngapTask->m_ueCtx.count(ueId) == 0) {
+            QLOG("QNC_NOTIFY ABORT: UE=%d not found", ueId);
+            sendError(msg.address, "UE not found with given ID");
+            break;
+        }
+        QLOG("QNC_NOTIFY STEP1 OK: UE=%d found", ueId);
+ 
+        auto &pduSessions = m_base->ngapTask->m_pduSessions;
+        if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi)) {
+            QLOG("QNC_NOTIFY ABORT: no PDU session UE=%d PSI=%d", ueId, psi);
+            sendError(msg.address, "PDU session not found for given UE/PSI");
+            break;
+        }
+        QLOG("QNC_NOTIFY STEP2 OK: PDU session found UE=%d PSI=%d", ueId, psi);
+ 
+        auto *resource = pduSessions.at(ueId).at(psi);
+        if (!resource) {
+            QLOG("QNC_NOTIFY ABORT: resource null UE=%d PSI=%d", ueId, psi);
+            sendError(msg.address, "PDU session resource is null");
+            break;
+        }
+        QLOG("QNC_NOTIFY STEP3 OK: resource valid, qncFlows count=%d",
+             (int)resource->qncFlows.size());
+ 
+        bool qncFound = false;
+        for (auto &flow : resource->qncFlows) {
+            if (flow.qfi == qfi && flow.qncEnabled) {
+                qncFound = true;
+                if (!fulfilled && !flow.altProfiles.empty()) {
+                    flow.activeProfileIndex =
+                        (flow.activeProfileIndex + 1) %
+                        (static_cast<int>(flow.altProfiles.size()) + 1);
+                    QLOG("QNC_NOTIFY profile rotated -> activeIndex=%d",
+                         flow.activeProfileIndex);
+                }
+                break;
+            }
+        }
+ 
+        if (!qncFound) {
+            QLOG("QNC_NOTIFY ABORT: QFI=%d not found or QNC not enabled", qfi);
+            sendError(msg.address, "QFI not found or QNC not enabled for this flow");
+            break;
+        }
+        QLOG("QNC_NOTIFY STEP4 OK: QNC flow found, calling sendQosFlowNotify");
+ 
+        m_base->ngapTask->sendQosFlowNotify(ueId, psi, qfi, fulfilled);
+ 
+        QLOG("QNC_NOTIFY STEP5 OK: sendQosFlowNotify returned");
+        sendResult(msg.address, std::string("Sent QoS flow notify: ") +
+            (fulfilled ? "fulfilled" : "not-fulfilled"));
+        break;
     }
+ 
+    case app::GnbCliCommand::QNC_NOTIFY_BATCH: {
+        int psi          = msg.cmd->psi;
+        int qfi          = msg.cmd->qfi;
+        bool fulfilled   = msg.cmd->fulfilled;
+        int nbUes        = msg.cmd->nbUes;
+        int nbNotif      = msg.cmd->nbNotif;
+        int hysteresisMs = msg.cmd->hysteresisMs;
+ 
+        // ── STEP 0: log entry parameters ─────────────────────────────
+        QLOG("BATCH ENTER psi=%d qfi=%d fulfilled=%d nbUes=%d nbNotif=%d hysteresis=%dms",
+             psi, qfi, (int)fulfilled, nbUes, nbNotif, hysteresisMs);
+ 
+        if (hysteresisMs <= 0)
+            QLOG("BATCH WARNING: hysteresisMs=%d — no sleep between bursts!", hysteresisMs);
+ 
+        // ── STEP 1: snapshot current system state ─────────────────────
+        int totalUes      = (int)m_base->ngapTask->m_ueCtx.size();
+        int totalSessions = 0;
+        for (auto &u : m_base->ngapTask->m_pduSessions)
+            totalSessions += (int)u.second.size();
+        QLOG("BATCH STEP1: active UEs=%d active PDU sessions=%d", totalUes, totalSessions);
+ 
+        // ── STEP 2: collect eligible target UEs ───────────────────────
+        std::vector<int> targets;
+        for (auto &ue : m_base->ngapTask->m_ueCtx)
+        {
+            int ueId = ue.first;
+            auto &pduSessions = m_base->ngapTask->m_pduSessions;
+ 
+            if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi))
+            {
+                QLOG("BATCH STEP2: UE=%d SKIP — no PDU session PSI=%d", ueId, psi);
+                continue;
+            }
+ 
+            auto *resource = pduSessions.at(ueId).at(psi);
+            if (!resource)
+            {
+                QLOG("BATCH STEP2: UE=%d SKIP — resource null PSI=%d", ueId, psi);
+                continue;
+            }
+ 
+            QLOG("BATCH STEP2: UE=%d PSI=%d found, qncFlows count=%d",
+                 ueId, psi, (int)resource->qncFlows.size());
+ 
+            bool found = false;
+            for (auto &flow : resource->qncFlows)
+            {
+                QLOG("BATCH STEP2: UE=%d checking flow qfi=%d qncEnabled=%d",
+                     ueId, flow.qfi, (int)flow.qncEnabled);
+                if (flow.qfi == qfi && flow.qncEnabled)
+                {
+                    found = true;
+                    break;
+                }
+            }
+ 
+            if (!found)
+            {
+                QLOG("BATCH STEP2: UE=%d SKIP — no QNC flow QFI=%d", ueId, qfi);
+                continue;
+            }
+ 
+            targets.push_back(ueId);
+            QLOG("BATCH STEP2: UE=%d ADDED (targets so far=%d)", ueId, (int)targets.size());
+ 
+            if ((int)targets.size() >= nbUes)
+            {
+                QLOG("BATCH STEP2: reached nbUes=%d cap, stopping collection", nbUes);
+                break;
+            }
+        }
+ 
+        QLOG("BATCH STEP2 DONE: collected=%d requested=%d", (int)targets.size(), nbUes);
+ 
+        if (targets.empty())
+        {
+            QLOG("BATCH ABORT: no eligible targets found");
+            sendError(msg.address, "No UEs with QNC-enabled flow found for given PSI/QFI");
+            break;
+        }
+ 
+        int actualUes          = (int)targets.size();
+        int totalNotifExpected = nbNotif * actualUes;
+        QLOG("BATCH STEP2: plan — %d bursts x %d UEs = %d total notifications",
+             nbNotif, actualUes, totalNotifExpected);
+ 
+        // ── STEP 3: notification loop ─────────────────────────────────
+        int sentCount    = 0;
+        int skippedCount = 0;
+ 
+        for (int n = 0; n < nbNotif; n++)
+        {
+            QLOG("BATCH STEP3: burst %d/%d START (sent=%d skipped=%d)",
+                 n + 1, nbNotif, sentCount, skippedCount);
+ 
+            for (int ueId : targets)
+            {
+                auto &pduSessions = m_base->ngapTask->m_pduSessions;
+ 
+                // guard 1: UE still registered
+                if (m_base->ngapTask->m_ueCtx.count(ueId) == 0)
+                {
+                    QLOG("BATCH burst=%d UE=%d SKIP — no longer in m_ueCtx", n + 1, ueId);
+                    skippedCount++;
+                    continue;
+                }
+ 
+                // guard 2: PDU session still alive
+                if (!pduSessions.count(ueId) || !pduSessions.at(ueId).count(psi))
+                {
+                    QLOG("BATCH burst=%d UE=%d SKIP — PDU session gone PSI=%d", n + 1, ueId, psi);
+                    skippedCount++;
+                    continue;
+                }
+ 
+                auto *resource = pduSessions.at(ueId).at(psi);
+                if (!resource)
+                {
+                    QLOG("BATCH burst=%d UE=%d SKIP — resource null", n + 1, ueId);
+                    skippedCount++;
+                    continue;
+                }
+ 
+                // guard 3: QNC flow still active
+                bool qncFound = false;
+                for (auto &flow : resource->qncFlows)
+                {
+                    if (flow.qfi == qfi && flow.qncEnabled)
+                    {
+                        qncFound = true;
+                        if (!fulfilled && !flow.altProfiles.empty())
+                        {
+                            flow.activeProfileIndex =
+                                (flow.activeProfileIndex + 1) %
+                                (static_cast<int>(flow.altProfiles.size()) + 1);
+                            QLOG("BATCH burst=%d UE=%d profile rotated -> idx=%d",
+                                 n + 1, ueId, flow.activeProfileIndex);
+                        }
+                        break;
+                    }
+                }
+ 
+                if (!qncFound)
+                {
+                    QLOG("BATCH burst=%d UE=%d SKIP — QNC flow gone QFI=%d", n + 1, ueId, qfi);
+                    skippedCount++;
+                    continue;
+                }
+ 
+                // all guards passed — send
+                QLOG("BATCH burst=%d UE=%d SENDING PSI=%d QFI=%d", n + 1, ueId, psi, qfi);
+                m_base->ngapTask->sendQosFlowNotify(ueId, psi, qfi, fulfilled);
+                sentCount++;
+                QLOG("BATCH burst=%d UE=%d SENT OK (total sent=%d)", n + 1, ueId, sentCount);
+            }
+ 
+            QLOG("BATCH STEP3: burst %d/%d END (sent=%d skipped=%d)",
+                 n + 1, nbNotif, sentCount, skippedCount);
+ 
+            // hysteresis between bursts
+            if (hysteresisMs > 0 && n < nbNotif - 1)
+            {
+                QLOG("BATCH sleeping %dms ...", hysteresisMs);
+                std::this_thread::sleep_for(std::chrono::milliseconds(hysteresisMs));
+                QLOG("BATCH sleep done");
+            }
+        }
+ 
+        // ── STEP 4: summary ───────────────────────────────────────────
+        QLOG("BATCH DONE sent=%d skipped=%d expected=%d UEs=%d bursts=%d",
+             sentCount, skippedCount, totalNotifExpected, actualUes, nbNotif);
+ 
+        std::string resultMsg =
+            "Sent " + std::to_string(sentCount) +
+            "/" + std::to_string(totalNotifExpected) +
+            (fulfilled ? " fulfilled" : " not-fulfilled") +
+            " notifications to " + std::to_string(actualUes) + " UEs" +
+            " (PSI=" + std::to_string(psi) +
+            " QFI=" + std::to_string(qfi) +
+            " hysteresis=" + std::to_string(hysteresisMs) + "ms" +
+            " skipped=" + std::to_string(skippedCount) + ")";
+        sendResult(msg.address, resultMsg);
+        break;
+    }
+ 
+    } // end switch
 }
 
 } // namespace nr::gnb
