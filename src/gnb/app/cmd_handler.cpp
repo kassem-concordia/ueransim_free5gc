@@ -150,7 +150,11 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
             sendResult(msg.address, "0 0");
         } else {
             int minId = m_base->ngapTask->m_ueCtx.begin()->first;
-            int maxId = m_base->ngapTask->m_ueCtx.rbegin()->first;
+            int maxId = minId;
+            for (auto &ue : m_base->ngapTask->m_ueCtx) {
+                if (ue.first < minId) minId = ue.first;
+                if (ue.first > maxId) maxId = ue.first;
+            }
             sendResult(msg.address,
                 std::to_string(minId) + " " + std::to_string(maxId));
         }
