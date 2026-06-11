@@ -145,6 +145,17 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
         sendResult(msg.address, std::to_string(m_base->ngapTask->m_ueCtx.size()));
         break;
     }
+    case app::GnbCliCommand::UE_RANGE: {
+        if (m_base->ngapTask->m_ueCtx.empty()) {
+            sendResult(msg.address, "0 0");
+        } else {
+            int minId = m_base->ngapTask->m_ueCtx.begin()->first;
+            int maxId = m_base->ngapTask->m_ueCtx.rbegin()->first;
+            sendResult(msg.address,
+                std::to_string(minId) + " " + std::to_string(maxId));
+        }
+        break;
+    }
     case app::GnbCliCommand::UE_RELEASE_REQ: {
         if (m_base->ngapTask->m_ueCtx.count(msg.cmd->ueId) == 0)
             sendError(msg.address, "UE not found with given ID");

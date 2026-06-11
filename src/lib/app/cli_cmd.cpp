@@ -151,6 +151,7 @@ static OrderedMap<std::string, CmdEntry> g_gnbCmdEntries = {
     {"amf-info", {"Show some status information about the given AMF", "<amf-id>", DefaultDesc, true}},
     {"ue-list", {"List all UEs associated with the gNB", "", DefaultDesc, false}},
     {"ue-count", {"Print the total number of UEs connected the this gNB", "", DefaultDesc, false}},
+    {"ue-range", {"Print the min and max UE IDs currently registered at this gNB", "", DefaultDesc, false}}, //kassem
     {"ue-release", {"Request a UE context release for the given UE", "<ue-id>", DefaultDesc, false}},
     {"qnc-notify", {"Send QoS flow notification for a GBR flow", "<ue-id> <psi> <qfi> <fulfilled|not-fulfilled>", DefaultDesc, true}}, //kassem
     {"qnc-notify-batch", {"Send QoS flow notifications to consecutive UEs starting from first_ue_id", "<first_ue_id> <nb_ues> <psi> <qfi> <cause> <nb_notif> <hysteresis_ms>", DefaultDesc, true}}, //kassem
@@ -205,6 +206,10 @@ static std::unique_ptr<GnbCliCommand> GnbCliParseImpl(const std::string &subCmd,
     else if (subCmd == "ue-count")
     {
         return std::make_unique<GnbCliCommand>(GnbCliCommand::UE_COUNT);
+    }
+    else if (subCmd == "ue-range")
+    {
+        return std::make_unique<GnbCliCommand>(GnbCliCommand::UE_RANGE); //kassem
     }
     else if (subCmd == "ue-release")
     {

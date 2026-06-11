@@ -28,6 +28,7 @@ struct GnbCliCommand
         AMF_INFO,
         UE_LIST,
         UE_COUNT,
+        UE_RANGE, //kassem
         UE_RELEASE_REQ,
         QNC_NOTIFY, //kassem
         QNC_NOTIFY_BATCH, //kassem
