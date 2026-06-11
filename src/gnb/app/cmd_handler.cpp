@@ -145,7 +145,7 @@ void GnbCmdHandler::handleCmdImpl(NmGnbCliCommand &msg)
         sendResult(msg.address, std::to_string(m_base->ngapTask->m_ueCtx.size()));
         break;
     }
-    case app::GnbCliCommand::UE_RANGE: {
+    case app::GnbCliCommand::UE_RANGE: { //kassem
         if (m_base->ngapTask->m_ueCtx.empty()) {
             sendResult(msg.address, "0 0");
         } else {
